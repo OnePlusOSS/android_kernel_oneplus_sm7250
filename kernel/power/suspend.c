@@ -36,6 +36,12 @@
 
 #include "power.h"
 
+#include <linux/gpio.h>
+#include <linux/soc/qcom/smem_state.h>
+extern struct qcom_smem_state *qstate;
+#define PROC_AWAKE_ID 12 /* 12th bit */
+#define AWAKE_BIT BIT(PROC_AWAKE_ID)
+
 const char * const pm_labels[] = {
 	[PM_SUSPEND_TO_IDLE] = "freeze",
 	[PM_SUSPEND_STANDBY] = "standby",
@@ -630,8 +636,15 @@ int pm_suspend(suspend_state_t state)
 	if (state <= PM_SUSPEND_ON || state >= PM_SUSPEND_MAX)
 		return -EINVAL;
 
+	qcom_smem_state_update_bits(qstate, AWAKE_BIT, 0);
+	pr_err("%s: PM_SUSPEND_PREPARE smp2p_change_state", __func__);
+
 	pr_info("suspend entry (%s)\n", mem_sleep_labels[state]);
 	error = enter_state(state);
+
+	qcom_smem_state_update_bits(qstate, AWAKE_BIT, AWAKE_BIT);
+	pr_err("%s: PM_POST_SUSPEND smp2p_change_state", __func__);
+
 	if (error) {
 		suspend_stats.fail++;
 		dpm_save_failed_errno(error);
