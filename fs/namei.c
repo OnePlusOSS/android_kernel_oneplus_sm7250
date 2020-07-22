@@ -39,6 +39,9 @@
 #include <linux/bitops.h>
 #include <linux/init_task.h>
 #include <linux/uaccess.h>
+#ifdef CONFIG_FSC
+#include <linux/oem/fsc.h>
+#endif
 #include <linux/build_bug.h>
 
 #include "internal.h"
@@ -1019,7 +1022,8 @@ static int may_linkat(struct path *link)
  * may_create_in_sticky - Check whether an O_CREAT open in a sticky directory
  *			  should be allowed, or not, on files that already
  *			  exist.
- * @dir: the sticky parent directory
+ * @dir_mode: mode bits of directory
+ * @dir_uid: owner of directory
  * @inode: the inode of the file to open
  *
  * Block an O_CREAT open of a FIFO (or a regular file) when:
@@ -1035,18 +1039,18 @@ static int may_linkat(struct path *link)
  *
  * Returns 0 if the open is allowed, -ve on error.
  */
-static int may_create_in_sticky(struct dentry * const dir,
+static int may_create_in_sticky(umode_t dir_mode, kuid_t dir_uid,
 				struct inode * const inode)
 {
 	if ((!sysctl_protected_fifos && S_ISFIFO(inode->i_mode)) ||
 	    (!sysctl_protected_regular && S_ISREG(inode->i_mode)) ||
-	    likely(!(dir->d_inode->i_mode & S_ISVTX)) ||
-	    uid_eq(inode->i_uid, dir->d_inode->i_uid) ||
+	    likely(!(dir_mode & S_ISVTX)) ||
+	    uid_eq(inode->i_uid, dir_uid) ||
 	    uid_eq(current_fsuid(), inode->i_uid))
 		return 0;
 
-	if (likely(dir->d_inode->i_mode & 0002) ||
-	    (dir->d_inode->i_mode & 0020 &&
+	if (likely(dir_mode & 0002) ||
+	    (dir_mode & 0020 &&
 	     ((sysctl_protected_fifos >= 2 && S_ISFIFO(inode->i_mode)) ||
 	      (sysctl_protected_regular >= 2 && S_ISREG(inode->i_mode))))) {
 		return -EACCES;
@@ -2348,18 +2352,44 @@ static int filename_lookup(int dfd, struct filename *name, unsigned flags,
 {
 	int retval;
 	struct nameidata nd;
+#ifdef CONFIG_FSC
+	unsigned int hidx = 0;
+	size_t len = 0;
+	bool is_fsc_path_candidate = false;
+#endif
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 	if (unlikely(root)) {
 		nd.root = *root;
 		flags |= LOOKUP_ROOT;
 	}
+#ifdef CONFIG_FSC
+	is_fsc_path_candidate = (fsc_enable && fsc_allow_list_cur &&
+					fsc_path_check(name, &len));
+	if (is_fsc_path_candidate && fsc_absence_check(name->name, len)) {
+		putname(name);
+		return -ENOENT;
+	}
+#endif
+
 	set_nameidata(&nd, dfd, name);
 	retval = path_lookupat(&nd, flags | LOOKUP_RCU, path);
 	if (unlikely(retval == -ECHILD))
 		retval = path_lookupat(&nd, flags, path);
 	if (unlikely(retval == -ESTALE))
 		retval = path_lookupat(&nd, flags | LOOKUP_REVAL, path);
+
+#ifdef CONFIG_FSC
+	if (is_fsc_path_candidate) {
+		hidx = fsc_get_hidx(name->name, len);
+		fsc_spin_lock(hidx);
+		if (retval == -ENOENT)
+			fsc_insert_absence_path_locked(name->name, len, hidx);
+		else
+			fsc_delete_absence_path_locked(name->name, len, hidx);
+		fsc_spin_unlock(hidx);
+	}
+#endif
 
 	if (likely(!retval))
 		audit_inode(name, path->dentry, flags & LOOKUP_PARENT);
@@ -3296,6 +3326,8 @@ static int do_last(struct nameidata *nd,
 		   struct file *file, const struct open_flags *op)
 {
 	struct dentry *dir = nd->path.dentry;
+	kuid_t dir_uid = nd->inode->i_uid;
+	umode_t dir_mode = nd->inode->i_mode;
 	int open_flag = op->open_flag;
 	bool will_truncate = (open_flag & O_TRUNC) != 0;
 	bool got_write = false;
@@ -3431,7 +3463,7 @@ finish_open:
 		error = -EISDIR;
 		if (d_is_dir(nd->path.dentry))
 			goto out;
-		error = may_create_in_sticky(dir,
+		error = may_create_in_sticky(dir_mode, dir_uid,
 					     d_backing_inode(nd->path.dentry));
 		if (unlikely(error))
 			goto out;
@@ -3719,6 +3751,10 @@ EXPORT_SYMBOL(kern_path_create);
 
 void done_path_create(struct path *path, struct dentry *dentry)
 {
+#ifdef CONFIG_FSC
+	if (fsc_enable && fsc_allow_list_cur)
+		fsc_delete_absence_path_dentry(path, dentry);
+#endif
 	dput(dentry);
 	inode_unlock(path->dentry->d_inode);
 	mnt_drop_write(path->mnt);
@@ -4715,6 +4751,12 @@ retry_deleg:
 	error = vfs_rename2(old_path.mnt, old_path.dentry->d_inode, old_dentry,
 			   new_path.dentry->d_inode, new_dentry,
 			   &delegated_inode, flags);
+
+#ifdef CONFIG_FSC
+	if (fsc_enable && fsc_allow_list_cur && !error)
+		fsc_delete_absence_path_dentry(&new_path, new_dentry);
+#endif
+
 exit5:
 	dput(new_dentry);
 exit4:

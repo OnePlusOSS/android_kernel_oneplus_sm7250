@@ -70,6 +70,8 @@ struct se_geni_rsc {
 	struct pinctrl *geni_pinctrl;
 	struct pinctrl_state *geni_gpio_active;
 	struct pinctrl_state *geni_gpio_sleep;
+ // Added for ESD issue AVICII-556
+	struct pinctrl_state *geni_gpio_reset;
 	int	clk_freq_out;
 	unsigned int num_clk_levels;
 	unsigned long *clk_perf_tbl;
@@ -78,6 +80,9 @@ struct se_geni_rsc {
 #define PINCTRL_DEFAULT	"default"
 #define PINCTRL_ACTIVE	"active"
 #define PINCTRL_SLEEP	"sleep"
+
+// Added for ESD issue AVICII-556
+#define PINCTRL_RESET	"reset"
 
 #define KHz(freq) (1000 * (freq))
 

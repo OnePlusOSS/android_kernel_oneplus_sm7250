@@ -656,8 +656,11 @@ static int adc7_do_conversion(struct adc_chip *adc,
 	}
 
 	/* No support for polling mode at present*/
-	wait_for_completion_timeout(&adc->complete,
-					ADC7_CONV_TIMEOUT);
+	if (!wait_for_completion_timeout(&adc->complete,
+					ADC7_CONV_TIMEOUT)) {
+		pr_err("ADC conversion TIMEDOUT.\n");
+		/* TODO: Confirm whether the adc_read could still be valid */
+	}
 
 	ret = adc_read(adc, ADC_USR_STATUS1, &status, 1);
 	if (ret < 0)
@@ -919,10 +922,10 @@ static const struct adc_channels adc_chans_pmic5[ADC_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_PM5_SMB_TEMP)
 	[ADC_AMUX_THM3]			= ADC_CHAN_TEMP("amux_thm3", 1,
 					SCALE_HW_CALIB_PM5_SMB_TEMP)
-	[ADC_GPIO1_PU2]	= ADC_CHAN_TEMP("gpio1_pu2", 1,
-					SCALE_HW_CALIB_THERM_100K_PULLUP)
-	[ADC_GPIO2_PU2]	= ADC_CHAN_TEMP("gpio2_pu2", 1,
-					SCALE_HW_CALIB_THERM_100K_PULLUP)
+	[ADC_GPIO1_PU1] = ADC_CHAN_VOLT("usb_tem1_adc_v", 1,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC_GPIO2_PU1] = ADC_CHAN_VOLT("usb_tem2_adc_v", 1,
+					SCALE_HW_CALIB_DEFAULT)
 	[ADC_GPIO3_PU2]	= ADC_CHAN_TEMP("gpio3_pu2", 1,
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
 	[ADC_GPIO4_PU2]	= ADC_CHAN_TEMP("gpio4_pu2", 1,

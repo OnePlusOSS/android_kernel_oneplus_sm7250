@@ -29,6 +29,10 @@
 #include <linux/task_io_accounting.h>
 #include <linux/rseq.h>
 
+#ifdef CONFIG_CONTROL_CENTER
+#include <oneplus/control_center/control_center_helper.h>
+#endif
+
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
 struct backing_dev_info;
@@ -131,6 +135,20 @@ enum fps {
 	FPS90 = 90,
 	FPS120 = 120,
 };
+
+#ifdef CONFIG_UXCHAIN
+#define GOLD_PLUS_CPU 7
+#define PREEMPT_DISABLE_NS 10000000
+extern int sysctl_uxchain_enabled;
+extern int sysctl_launcher_boost_enabled;
+extern void uxchain_mutex_list_add(struct task_struct *task,
+	struct list_head *entry, struct list_head *head, struct mutex *lock);
+extern void uxchain_dynamic_ux_boost(struct task_struct *owner,
+	struct task_struct *task);
+extern void uxchain_dynamic_ux_reset(struct task_struct *task);
+extern struct task_struct *get_futex_owner(u32 __user *uaddr2);
+extern int ux_thread(struct task_struct *task);
+#endif
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 
@@ -518,6 +536,9 @@ struct sched_entity {
 	u64				sum_exec_runtime;
 	u64				vruntime;
 	u64				prev_sum_exec_runtime;
+#ifdef CONFIG_UXCHAIN
+	u64				vruntime_minus;
+#endif
 
 	u64				nr_migrations;
 
@@ -775,6 +796,14 @@ struct task_struct {
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
 	unsigned int			ptrace;
+	/* huruihuan add for kill task in D status */
+	unsigned int kill_flag;
+	struct timespec ttu;
+
+	int compensate_need;
+
+	/* add for fd leak debug */
+	bool dump_fd_leak;
 
 #ifdef CONFIG_SMP
 	struct llist_node		wake_entry;
@@ -846,6 +875,9 @@ struct task_struct {
 	int				nr_cpus_allowed;
 	cpumask_t			cpus_allowed;
 	cpumask_t			cpus_requested;
+#ifdef CONFIG_RATP
+	cpumask_t			cpus_suggested;
+#endif
 
 #ifdef CONFIG_PREEMPT_RCU
 	int				rcu_read_lock_nesting;
@@ -1090,6 +1122,9 @@ struct task_struct {
 
 	/* Protection of the PI data structures: */
 	raw_spinlock_t			pi_lock;
+#ifdef CONFIG_UXCHAIN
+	raw_spinlock_t			uxchain_lock;
+#endif
 
 	struct wake_q_node		wake_q;
 
@@ -1402,12 +1437,83 @@ struct task_struct {
 	/* Used by LSM modules for access restriction: */
 	void				*security;
 #endif
+#ifdef CONFIG_OPCHAIN
+	u64 utask_tag;
+	u64 utask_tag_base;
+	int etask_claim;
+	int claim_cpu;
+	bool utask_slave;
+#endif
 
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.
 	 */
 	randomized_struct_fields_end
+
+#ifdef CONFIG_SMART_BOOST
+	int hot_count;
+#endif
+#ifdef CONFIG_CONTROL_CENTER
+	bool cc_enable;
+	struct cc_tsk_data *ctd;
+	u64 nice_effect_ts;
+	int cached_prio;
+#endif
+
+#ifdef CONFIG_UXCHAIN
+	int static_ux;
+	int dynamic_ux;
+	int ux_depth;
+	u64 oncpu_time;
+	int	prio_saved;
+	int	saved_flag;
+#endif
+
+#ifdef CONFIG_IM
+	int im_flag;
+#endif
+	/* add for cpu distribution statistics */
+	atomic64_t cpu_dist[8];
+	atomic64_t total_cpu_dist[8];
+
+#ifdef CONFIG_HOUSTON
+#ifndef HT_PERF_COUNT_MAX
+#define HT_PERF_COUNT_MAX 5
+	/* RTG */
+	spinlock_t rtg_lock;
+	struct list_head rtg_node;
+	struct list_head rtg_perf_node;
+	s64 rtg_ts;
+	s64 rtg_ts2;
+	s64 rtg_period_ts;
+	u32 rtg_cnt;
+	u32 rtg_peak;
+	u64 prev_schedstat;
+	u64 prev_ts_us;
+
+	/* perf */
+	struct list_head perf_node;
+	u32 perf_activate;
+	u32 perf_regular_activate;
+	u64 enqueue_ts;
+	u64 run_ts;
+	u64 end_ts;
+	u64 acc_run_ts;
+	u64 delta_ts;
+	u64 total_run_ts;
+
+	/* filter */
+	s64 f_ts;
+	u32 f_cnt;
+	u32 f_peak;
+	u64 perf_counters[HT_PERF_COUNT_MAX];
+	struct perf_event *perf_events[HT_PERF_COUNT_MAX];
+	struct work_struct perf_work;
+	struct list_head ht_perf_event_node;
+#undef HT_PERF_COUNT_MAX
+#endif
+#endif
 
 	/* CPU-specific state of this task: */
 	struct thread_struct		thread;
@@ -1419,6 +1525,13 @@ struct task_struct {
 	 * Do not put anything below here!
 	 */
 };
+
+/* add for cpu distribution statistics */
+static inline void cpu_dist_inc(struct task_struct *p, int cpu)
+{
+	if (likely(cpu >= 0 && cpu < 8))
+		atomic64_inc(&p->cpu_dist[cpu]);
+}
 
 static inline struct pid *task_pid(struct task_struct *task)
 {
@@ -1723,6 +1836,11 @@ static inline bool cpupri_check_rt(void)
 
 #ifndef cpu_relax_yield
 #define cpu_relax_yield() cpu_relax()
+#endif
+
+#ifdef CONFIG_CONTROL_CENTER
+extern void restore_user_nice_safe(struct task_struct *p);
+extern void set_user_nice_no_cache(struct task_struct *p, long nice);
 #endif
 
 extern int yield_to(struct task_struct *p, bool preempt);

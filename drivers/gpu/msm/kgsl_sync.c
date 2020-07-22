@@ -768,6 +768,7 @@ long kgsl_ioctl_syncsource_signal_fence(struct kgsl_device_private *dev_priv,
 
 	fence = sync_file_get_fence(param->fence_fd);
 	if (fence == NULL) {
+		pr_err("[Qcom_debug: %d : %s] BAD FD, %d !", current->pid, current->comm, param->fence_fd);
 		ret = -EBADF;
 		goto out;
 	}

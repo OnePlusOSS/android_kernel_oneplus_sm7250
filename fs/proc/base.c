@@ -100,7 +100,7 @@
 #include "fd.h"
 
 #include "../../lib/kstrtox.h"
-
+#include <oneplus/houston/houston_helper.h>
 /* NOTE:
  *	Implementing inode permission operations in /proc is almost
  *	certainly an error.  Permission checks need to happen during
@@ -911,6 +911,76 @@ static const struct file_operations proc_mem_operations = {
 	.open		= mem_open,
 	.release	= mem_release,
 };
+
+#ifdef CONFIG_UXCHAIN
+static int proc_static_ux_show(struct seq_file *m, void *v)
+{
+	struct inode *inode = m->private;
+	struct task_struct *p;
+
+	p = get_proc_task(inode);
+	if (!p)
+		return -ESRCH;
+	seq_printf(m, "%d\n", p->static_ux);
+	put_task_struct(p);
+	return 0;
+}
+
+static int proc_static_ux_open(struct inode	*inode, struct file *filp)
+{
+	return single_open(filp, proc_static_ux_show, inode);
+}
+
+static ssize_t proc_static_ux_write(struct file *file, const char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	struct task_struct *task;
+	char buffer[PROC_NUMBUF];
+	int err, static_ux;
+
+	memset(buffer, 0, sizeof(buffer));
+	if (count > sizeof(buffer) - 1)
+		count = sizeof(buffer) - 1;
+	if (copy_from_user(buffer, buf, count))
+		return -EFAULT;
+	err = kstrtoint(strstrip(buffer), 0, &static_ux);
+	if (err)
+		return err;
+	task = get_proc_task(file_inode(file));
+	if (!task)
+		return -ESRCH;
+
+	task->static_ux = static_ux != 0 ? 1 : 0;
+
+	put_task_struct(task);
+	return count;
+}
+
+static ssize_t proc_static_ux_read(struct file *file, char __user *buf,
+							    size_t count, loff_t *ppos)
+{
+	char buffer[PROC_NUMBUF];
+	struct task_struct *task = NULL;
+	int static_ux = -1;
+	size_t len = 0;
+
+	task = get_proc_task(file_inode(file));
+	if (!task)
+		return -ESRCH;
+	static_ux = task->static_ux;
+	put_task_struct(task);
+	len = snprintf(buffer, sizeof(buffer), "%d\n", static_ux);
+	return simple_read_from_buffer(buf, count, ppos, buffer, len);
+}
+
+static const struct file_operations proc_static_ux_operations = {
+	.open       = proc_static_ux_open,
+	.write      = proc_static_ux_write,
+	.read       = proc_static_ux_read,
+	.llseek     = seq_lseek,
+	.release    = single_release,
+};
+#endif
 
 static int environ_open(struct inode *inode, struct file *file)
 {
@@ -3298,6 +3368,298 @@ static int proc_pid_patch_state(struct seq_file *m, struct pid_namespace *ns,
 }
 #endif /* CONFIG_LIVEPATCH */
 
+#ifdef CONFIG_IM
+static int proc_im_flag_show(struct seq_file *m, void *v)
+{
+	struct inode *inode = m->private;
+	struct task_struct *p;
+
+	p = get_proc_task(inode);
+	if (!p)
+		return -ESRCH;
+	seq_printf(m, "%d\n", p->im_flag);
+	put_task_struct(p);
+	return 0;
+}
+
+static int proc_im_flag_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, proc_im_flag_show, inode);
+}
+
+static ssize_t proc_im_flag_write(struct file *file, const char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	struct task_struct *task;
+	char buffer[PROC_NUMBUF];
+	int err, imfg;
+
+	memset(buffer, 0, sizeof(buffer));
+	if (count > sizeof(buffer) - 1)
+		count = sizeof(buffer) - 1;
+	if (copy_from_user(buffer, buf, count))
+		return -EFAULT;
+	err = kstrtoint(strstrip(buffer), 0, &imfg);
+	if (err)
+		return err;
+	task = get_proc_task(file_inode(file));
+	if (!task)
+		return -ESRCH;
+
+	task->im_flag = imfg;
+
+	put_task_struct(task);
+	return count;
+}
+
+static ssize_t proc_im_flag_read(struct file *file, char __user *buf,
+							    size_t count, loff_t *ppos)
+{
+	char buffer[PROC_NUMBUF];
+	struct task_struct *task = NULL;
+	int imfg = 0;
+	size_t len = 0;
+
+	task = get_proc_task(file_inode(file));
+	if (!task)
+		return -ESRCH;
+	imfg = task->im_flag;
+	put_task_struct(task);
+	len = snprintf(buffer, sizeof(buffer), "%d\n", imfg);
+	return simple_read_from_buffer(buf, count, ppos, buffer, len);
+}
+
+static const struct file_operations proc_imfg_operations = {
+	.open       = proc_im_flag_open,
+	.write      = proc_im_flag_write,
+	.read       = proc_im_flag_read,
+	.llseek     = seq_lseek,
+	.release    = single_release,
+};
+static ssize_t
+tbctl_write(struct file *file, const char __user *buf,
+	size_t count, loff_t *offset)
+{
+	char buffer[64];
+	int err = 0;
+	unsigned int tb_pol = 0;
+	unsigned int tb_type = 0;
+	unsigned int args[6] = {0};
+	unsigned int v[4] = {0};
+	int c;
+	//struct inode *inode = file_inode(file);
+	//struct task_struct *p;
+
+	memset(buffer, 0, sizeof(buffer));
+	if (count > sizeof(buffer) - 1)
+		count = sizeof(buffer) - 1;
+	if (copy_from_user(buffer, buf, count)) {
+		err = -EFAULT;
+		goto out;
+	}
+
+	//p = get_proc_task(inode);
+	//if (!p)
+	//	return -ESRCH;
+
+	c = sscanf(buffer, "%u,%u,%u,%u,%u,%u,%u,%u\n",
+		&tb_pol, &tb_type,
+		&args[0], &args[1], &args[2], &args[3], &args[4], &args[5]);
+
+	if (c != 6 && c != 8) {
+		pr_err("tb params invalid. %s. IGNORED.\n", buffer);
+		err = -EFAULT;
+		goto out;
+	}
+
+	memcpy(v, args, sizeof(unsigned int) * 4);
+	tb_parse_req(tb_pol, tb_type, v);
+
+	//put_task_struct(p);
+out:
+	return (err < 0) ? err : count;
+}
+
+static int tbctl_show(struct seq_file *m, void *v)
+{
+	return 0;
+}
+
+static int tbctl_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, tbctl_show, inode);
+}
+static const struct file_operations proc_tbctl_operation = {
+	.open           = tbctl_open,
+	.read           = seq_read,
+	.write          = tbctl_write,
+	.llseek         = seq_lseek,
+	.release        = single_release,
+};
+#endif /* CONFIG_IM */
+
+#ifdef CONFIG_VM_FRAGMENT_MONITOR
+static ssize_t vm_fragment_max_gap_read(struct file *file,
+				char __user *buf, size_t count, loff_t *ppos)
+{
+	struct task_struct *task;
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+	char buffer[PROC_NUMBUF];
+	size_t len;
+	int vm_fragment_gap_max = 0;
+	int gl_fragment_gap_max = 0;
+
+	task = get_proc_task(file_inode(file));
+	if (!task)
+		return -ESRCH;
+
+	mm = get_task_mm(task);
+	if (!mm) {
+		put_task_struct(task);
+		return -ENOMEM;
+	}
+
+	if (RB_EMPTY_ROOT(&mm->mm_rb)) {
+		mmput(mm);
+		put_task_struct(task);
+		return -ENOMEM;
+	}
+
+	vma = rb_entry(mm->mm_rb.rb_node, struct vm_area_struct, vm_rb);
+	vm_fragment_gap_max = (int)(vma->rb_subtree_gap >> 20);
+	gl_fragment_gap_max = (int)(vma->rb_glfragment_gap >> 20);
+
+	mmput(mm);
+	put_task_struct(task);
+
+	len = snprintf(buffer, sizeof(buffer), "%d %d\n", vm_fragment_gap_max, gl_fragment_gap_max);
+	return simple_read_from_buffer(buf, count, ppos, buffer, len);
+}
+
+static const struct file_operations proc_vm_fragment_monitor_operations = {
+	.read = vm_fragment_max_gap_read,
+};
+#endif
+
+#include <linux/random.h>
+static int va_feature;
+module_param(va_feature, int, 0644);
+
+unsigned long dbg_pm[8] = { 0 };
+static int dbg_buf_store(const char *buf, const struct kernel_param *kp)
+{
+	/* function for debug-only*/
+	if (sscanf(buf, "%lu %lu %lu %lu %lu %lu %lu %lu\n"
+				, &dbg_pm[0], &dbg_pm[1], &dbg_pm[2], &dbg_pm[3]
+				, &dbg_pm[4], &dbg_pm[5], &dbg_pm[6], &dbg_pm[7]) <= 7)
+		return -EINVAL;
+	va_feature = 0x7;
+	return 0;
+}
+
+static struct kernel_param_ops module_param_ops = {
+	.set = dbg_buf_store,
+	.get = param_get_int,
+};
+module_param_cb(dbg_buf, &module_param_ops, &va_feature, 0644);
+
+static ssize_t proc_va_feature_read(struct file *file, char __user *buf,
+		size_t count, loff_t *ppos)
+{
+	struct task_struct *task;
+	struct mm_struct *mm;
+	char buffer[32];
+	int ret;
+
+	if (!test_thread_flag(TIF_32BIT))
+		return -EINVAL;
+
+	task = get_proc_task(file_inode(file));
+	if (!task)
+		return -ESRCH;
+
+	ret = -EINVAL;
+	mm = get_task_mm(task);
+	if (mm) {
+		if (mm->va_feature & 0x4) {
+			ret = snprintf(buffer, sizeof(buffer), "%d\n",
+					(mm->zygoteheap_in_MB > 256) ? mm->zygoteheap_in_MB : 256);
+			if (ret > 0)
+				ret = simple_read_from_buffer(buf, count, ppos,
+						buffer, ret);
+		}
+		mmput(mm);
+	}
+
+	put_task_struct(task);
+
+	return ret;
+}
+
+static ssize_t proc_va_feature_write(struct file *file, const char __user *buf,
+		size_t count, loff_t *ppos)
+{
+	struct task_struct *task;
+	struct mm_struct *mm;
+	int ret;
+	unsigned int heapsize;
+
+	if (!test_thread_flag(TIF_32BIT))
+		return -ENOTTY;
+
+	task = get_proc_task(file_inode(file));
+	if (!task)
+		return -ESRCH;
+
+	ret = kstrtouint_from_user(buf, count, 0, &heapsize);
+	if (ret) {
+		put_task_struct(task);
+		return ret;
+	}
+
+	mm = get_task_mm(task);
+	if (mm) {
+		mm->va_feature = va_feature;
+
+		/* useless to print comm, always "main" */
+		if (mm->va_feature & 0x1) {
+			mm->va_feature_rnd = (dbg_pm[6] + (get_random_long() % 0x1e00000)) & ~(0xffff);
+			special_arch_pick_mmap_layout(mm);
+		}
+
+		if ((mm->va_feature & 0x4) && (mm->zygoteheap_in_MB == 0))
+			mm->zygoteheap_in_MB = heapsize;
+
+		mmput(mm);
+	}
+
+	put_task_struct(task);
+
+	return count;
+}
+
+static const struct file_operations proc_va_feature_operations = {
+	.read           = proc_va_feature_read,
+	.write          = proc_va_feature_write,
+};
+
+static int proc_cpu_dist(struct seq_file *m, struct pid_namespace *ns,
+				struct pid *pid, struct task_struct *task)
+{
+	int i;
+
+	for (i = 0; i < 8; ++i) {
+		long long cnt = atomic_read(&task->cpu_dist[i]);
+		long long tcnt = atomic_read(&task->total_cpu_dist[i]) + cnt;
+
+		seq_printf(m, "cpu%d: %lld %lld\n", i, cnt, tcnt);
+		atomic64_set(&task->cpu_dist[i], 0);
+		atomic64_set(&task->total_cpu_dist[i], tcnt);
+	}
+	return 0;
+}
+
 /*
  * Thread groups
  */
@@ -3418,6 +3780,21 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_CPU_FREQ_TIMES
 	ONE("time_in_state", 0444, proc_time_in_state_show),
 #endif
+#ifdef CONFIG_IM
+	REG("im_flag", 0666, proc_imfg_operations),
+	REG("tb_ctl", 0666, proc_tbctl_operation),
+#endif
+	ONE("cpu_dist", 0666, proc_cpu_dist),
+#ifdef CONFIG_SMART_BOOST
+	REG("page_hot_count", 0666, proc_page_hot_count_operations),
+#endif
+#ifdef CONFIG_UXCHAIN
+	REG("static_ux", 0666, proc_static_ux_operations),
+#endif
+#ifdef CONFIG_VM_FRAGMENT_MONITOR
+	REG("vm_fragment_gap_max", 0666, proc_vm_fragment_monitor_operations),
+#endif
+	REG("va_feature", 0666, proc_va_feature_operations),
 };
 
 static int proc_tgid_base_readdir(struct file *file, struct dir_context *ctx)
@@ -3803,6 +4180,14 @@ static const struct pid_entry tid_base_stuff[] = {
 #ifdef CONFIG_CPU_FREQ_TIMES
 	ONE("time_in_state", 0444, proc_time_in_state_show),
 #endif
+#ifdef CONFIG_UXCHAIN
+	REG("static_ux", 0666, proc_static_ux_operations),
+#endif
+#ifdef CONFIG_IM
+	REG("im_flag", 0666, proc_imfg_operations),
+	REG("tb_ctl", 0666, proc_tbctl_operation),
+#endif
+	ONE("cpu_dist", 0666, proc_cpu_dist),
 };
 
 static int proc_tid_base_readdir(struct file *file, struct dir_context *ctx)

@@ -1121,7 +1121,16 @@ const char * const vmstat_text[] = {
 #if IS_ENABLED(CONFIG_ZSMALLOC)
 	"nr_zspages",
 #endif
+#ifdef CONFIG_SMART_BOOST
+	"nr_uid_lru",
+#endif
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	"nr_ioncache_pages",
+#endif
 	"nr_free_cma",
+#ifdef CONFIG_DEFRAG
+	"nr_free_defrag",
+#endif
 
 	/* enum numa_stat_item counters */
 #ifdef CONFIG_NUMA

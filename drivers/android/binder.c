@@ -75,6 +75,8 @@
 #include <uapi/linux/android/binder.h>
 #include <uapi/linux/sched/types.h>
 
+#include <linux/oem/im.h>
+
 #include <asm/cacheflush.h>
 
 #include "binder_alloc.h"
@@ -1194,6 +1196,9 @@ static void binder_do_set_priority(struct task_struct *task,
 	int priority; /* user-space prio value */
 	bool has_cap_nice;
 	unsigned int policy = desired.sched_policy;
+
+	if (im_hwc(task) || task->prio < MAX_RT_PRIO)
+		return;
 
 	if (task->policy == policy && task->normal_prio == desired.prio)
 		return;
@@ -2933,6 +2938,19 @@ static bool binder_proc_transaction(struct binder_transaction *t,
 		binder_transaction_priority(thread->task, t, node_prio,
 					    node->inherit_rt);
 		binder_enqueue_thread_work_ilocked(thread, &t->work);
+#ifdef CONFIG_UXCHAIN
+		if (!oneway && sysctl_uxchain_enabled && t->from && t->from->task
+			&& t->from->task->static_ux) {
+			thread->task->dynamic_ux = 1;
+			thread->task->ux_depth = t->from->task->ux_depth + 1;
+		}
+		if (!oneway && sysctl_uxchain_enabled &&
+			t->from && t->from->task &&
+			t->from->task->dynamic_ux /*&& t->from->task->ux_depth < 2*/) {
+			thread->task->dynamic_ux = 1;
+			thread->task->ux_depth = t->from->task->ux_depth + 1;
+		}
+#endif
 	} else if (!pending_async) {
 		binder_enqueue_work_ilocked(&t->work, &proc->todo);
 	} else {
@@ -3347,6 +3365,11 @@ static void binder_transaction(struct binder_proc *proc,
 	sg_buf_end_offset = sg_buf_offset + extra_buffers_size -
 		ALIGN(secctx_sz, sizeof(u64));
 	off_min = 0;
+#ifdef CONFIG_OPCHAIN
+	// morison.yan@ASTI, 2019/4/29, add for uxrealm CONFIG_OPCHAIN
+	binder_alloc_pass_binder_buffer(&target_proc->alloc,
+					t->buffer, tr->data_size);
+#endif
 	for (buffer_offset = off_start_offset; buffer_offset < off_end_offset;
 	     buffer_offset += sizeof(binder_size_t)) {
 		struct binder_object_header *hdr;
@@ -3536,6 +3559,12 @@ static void binder_transaction(struct binder_proc *proc,
 	tcomplete->type = BINDER_WORK_TRANSACTION_COMPLETE;
 	t->work.type = BINDER_WORK_TRANSACTION;
 
+#ifdef CONFIG_UXCHAIN
+	if (sysctl_uxchain_enabled && thread->task->dynamic_ux) {
+		thread->task->dynamic_ux = 0;
+		thread->task->ux_depth = 0;
+	}
+#endif
 	if (reply) {
 		binder_enqueue_thread_work(thread, tcomplete);
 		binder_inner_proc_lock(target_proc);
@@ -4486,6 +4515,18 @@ retry:
 			trd->sender_pid =
 				task_tgid_nr_ns(sender,
 						task_active_pid_ns(current));
+#ifdef CONFIG_UXCHAIN
+			if (sysctl_uxchain_enabled && t_from && t_from->task &&
+				t_from->task->static_ux) {
+				thread->task->dynamic_ux = 1;
+				thread->task->ux_depth = t_from->task->ux_depth + 1;
+			}
+			if (sysctl_uxchain_enabled && t_from && t_from->task &&
+				t_from->task->dynamic_ux /*&& t->from->task->ux_depth < 2*/) {
+				thread->task->dynamic_ux = 1;
+				thread->task->ux_depth = t_from->task->ux_depth + 1;
+			}
+#endif
 		} else {
 			trd->sender_pid = 0;
 		}

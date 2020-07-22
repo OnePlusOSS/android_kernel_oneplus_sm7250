@@ -46,6 +46,9 @@
 #include <soc/qcom/ramdump.h>
 #include "icnss_private.h"
 #include "icnss_qmi.h"
+#include <linux/oem/project_info.h>
+static u32 fw_version;
+static u32 fw_version_ext;
 
 #define MAX_PROP_SIZE			32
 #define NUM_LOG_PAGES			10
@@ -929,6 +932,29 @@ static int icnss_driver_event_server_exit(void *data)
 
 	return 0;
 }
+
+/* Initial and show wlan firmware build version */
+void cnss_set_fw_version(u32 version, u32 ext)
+{
+	fw_version = version;
+	fw_version_ext = ext;
+}
+EXPORT_SYMBOL(cnss_set_fw_version);
+
+static ssize_t cnss_version_information_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	if (!penv)
+		return -ENODEV;
+	return scnprintf(buf, PAGE_SIZE, "%u.%u.%u.%u.%u\n",
+		 (fw_version & 0xf0000000) >> 28,
+	(fw_version & 0xf000000) >> 24, (fw_version & 0xf00000) >> 20,
+	fw_version & 0x7fff, (fw_version_ext & 0xf0000000) >> 28);
+}
+
+static DEVICE_ATTR(cnss_version_information, 0444,
+			cnss_version_information_show, NULL);
+
 
 static int icnss_call_driver_probe(struct icnss_priv *priv)
 {
@@ -3485,9 +3511,10 @@ static int icnss_probe(struct platform_device *pdev)
 	if (ret)
 		icnss_pr_err("Failed to init platform device wakeup source, err = %d\n",
 			     ret);
-
 	penv = priv;
-
+	device_create_file(&penv->pdev->dev,
+		 &dev_attr_cnss_version_information);
+	push_component_info(WCN, "WCN3998-1", "QualComm");
 	init_completion(&priv->unblock_shutdown);
 
 	icnss_pr_info("Platform driver probed successfully\n");
@@ -3511,6 +3538,9 @@ static int icnss_remove(struct platform_device *pdev)
 	device_init_wakeup(&penv->pdev->dev, false);
 
 	icnss_debugfs_destroy(penv);
+
+	device_remove_file(&penv->pdev->dev,
+		 &dev_attr_cnss_version_information);
 
 	icnss_sysfs_destroy(penv);
 

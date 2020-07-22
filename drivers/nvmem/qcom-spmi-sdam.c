@@ -9,6 +9,8 @@
 #include <linux/of_platform.h>
 #include <linux/nvmem-provider.h>
 #include <linux/regmap.h>
+#include <linux/spmi.h>
+#include <linux/oem/power/oem_external_fg.h>
 
 #define SDAM_MEM_START			0x40
 #define REGISTER_MAP_ID			0x40
@@ -153,9 +155,6 @@ static int sdam_probe(struct platform_device *pdev)
 		return -ENXIO;
 	}
 	platform_set_drvdata(pdev, nvmem);
-
-	pr_info("SDAM base=0x%04x size=%d registered successfully\n",
-						sdam->base, sdam->size);
 
 	return 0;
 }

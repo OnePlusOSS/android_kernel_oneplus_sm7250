@@ -713,6 +713,18 @@ static struct clk_dummy measure_only_mccc_clk = {
 	},
 };
 
+#if defined(CONFIG_CONTROL_CENTER) || defined(CONFIG_HOUSTON)
+int get_only_mccc_hw(struct clk_hw **hwptr)
+{
+	if (unlikely(!&(measure_only_mccc_clk.hw))) {
+		*hwptr = NULL;
+		return -EINVAL;
+	}
+	*hwptr = &(measure_only_mccc_clk.hw);
+	return 0;
+}
+#endif
+
 static struct clk_dummy measure_only_cnoc_clk = {
 	.rrate = 1000,
 	.hw.init = &(struct clk_init_data){
@@ -830,7 +842,9 @@ static int clk_debug_lito_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Unable to get xo clock\n");
 		return PTR_ERR(clk);
 	}
-
+#if defined(CONFIG_CONTROL_CENTER) || defined(CONFIG_HOUSTON)
+	 dev_err(&pdev->dev, "houston or control center\n");
+#endif
 	debug_mux_priv.cxo = clk;
 
 	for (i = 0; i < ARRAY_SIZE(mux_list); i++) {

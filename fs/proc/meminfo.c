@@ -20,6 +20,11 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include "internal.h"
+/* bin.zhong@ASTI add CONFIG_DEFRAG */
+#include <oneplus/defrag/defrag_helper.h>
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+#include <linux/oem/oneplus_ion.h>
+#endif
 
 void __attribute__((weak)) arch_report_meminfo(struct seq_file *m)
 {
@@ -143,6 +148,17 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	show_val_kb(m, "CmaFree:        ",
 		    global_zone_page_state(NR_FREE_CMA_PAGES));
 #endif
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+#ifdef CONFIG_ION
+	show_val_kb(m, "IonTotalCache:  ",
+			global_zone_page_state(NR_IONCACHE_PAGES));
+	show_val_kb(m, "IonTotalUsed:   ", ion_total() >> PAGE_SHIFT);
+#endif
+#endif
+	/* bin.zhong@ASTI add CONFIG_DEFRAG */
+	show_defrag_free(m);
+	show_real_freemem(m, i.freeram);
+
 
 	hugetlb_report_meminfo(m);
 

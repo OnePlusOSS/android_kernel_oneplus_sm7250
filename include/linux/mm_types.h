@@ -281,6 +281,10 @@ struct vm_area_struct {
 	 */
 	unsigned long rb_subtree_gap;
 
+#ifdef CONFIG_VM_FRAGMENT_MONITOR
+	unsigned long rb_glfragment_gap;
+#endif
+
 	/* Second cache line starts here. */
 
 	struct mm_struct *vm_mm;	/* The address space we belong to. */
@@ -505,6 +509,9 @@ struct mm_struct {
 		/* HMM needs to track a few things per mm */
 		struct hmm *hmm;
 #endif
+		unsigned int zygoteheap_in_MB;
+		int va_feature;
+		unsigned long va_feature_rnd;
 	} __randomize_layout;
 
 	/*

@@ -83,6 +83,23 @@
 #define USB_HSPHY_1P8_VOL_MAX			1800000 /* uV */
 #define USB_HSPHY_1P8_HPM_LOAD			19000	/* uA */
 
+/* Add to tune USB2.0 eye diagram */
+unsigned int USB2_phy_tune;
+module_param(USB2_phy_tune, uint, 0644);
+MODULE_PARM_DESC(USB2_phy_tune, "QUSB PHY v2 TUNE");
+
+unsigned int USB2_phy_tune1;
+module_param(USB2_phy_tune1, uint, 0644);
+MODULE_PARM_DESC(USB2_phy_tune1, "QUSB PHY v2 TUNE1");
+
+unsigned int USB2_phy_tune2;
+module_param(USB2_phy_tune2, uint, 0644);
+MODULE_PARM_DESC(USB2_phy_tune2, "QUSB PHY v2 TUNE2");
+
+unsigned int USB2_phy_tune3;
+module_param(USB2_phy_tune3, uint, 0644);
+MODULE_PARM_DESC(USB2_phy_tune3, "QUSB PHY v2 TUNE3");
+
 struct msm_hsphy {
 	struct usb_phy		phy;
 	void __iomem		*base;
@@ -382,6 +399,26 @@ static int msm_hsphy_init(struct usb_phy *uphy)
 	if (phy->param_override_seq)
 		hsusb_phy_write_seq(phy->base, phy->param_override_seq,
 				phy->param_override_seq_cnt, 0);
+	/* add to tune USB 2.0 eye diagram */
+	if (USB2_phy_tune) {
+		writel_relaxed(USB2_phy_tune,
+			phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0);
+	}
+
+	if (USB2_phy_tune1) {
+		writel_relaxed(USB2_phy_tune1,
+			phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1);
+	}
+
+	if (USB2_phy_tune2) {
+		writel_relaxed(USB2_phy_tune2,
+			phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2);
+	}
+
+	if (USB2_phy_tune3) {
+		writel_relaxed(USB2_phy_tune3,
+			phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X3);
+	}
 
 	if (phy->pre_emphasis) {
 		u8 val = TXPREEMPAMPTUNE0(phy->pre_emphasis) &
@@ -424,7 +461,7 @@ static int msm_hsphy_init(struct usb_phy *uphy)
 			PARAM_OVRD_MASK, phy->param_ovrd3);
 	}
 
-	dev_dbg(uphy->dev, "x0:%08x x1:%08x x2:%08x x3:%08x\n",
+	dev_err(uphy->dev, "x0:%08x x1:%08x x2:%08x x3:%08x\n",
 	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0),
 	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1),
 	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2),

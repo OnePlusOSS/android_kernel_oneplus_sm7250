@@ -58,6 +58,9 @@ enum migratetype {
 #endif
 	MIGRATE_PCPTYPES, /* the number of types on the pcp lists */
 	MIGRATE_HIGHATOMIC = MIGRATE_PCPTYPES,
+#ifdef CONFIG_DEFRAG
+	MIGRATE_UNMOVABLE_DEFRAG_POOL,
+#endif
 #ifdef CONFIG_MEMORY_ISOLATION
 	MIGRATE_ISOLATE,	/* can't allocate from here */
 #endif
@@ -149,7 +152,16 @@ enum zone_stat_item {
 #if IS_ENABLED(CONFIG_ZSMALLOC)
 	NR_ZSPAGES,		/* allocated in zsmalloc */
 #endif
+#ifdef CONFIG_SMART_BOOST
+	NR_ZONE_UID_LRU,
+#endif
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	NR_IONCACHE_PAGES,
+#endif
 	NR_FREE_CMA_PAGES,
+#ifdef CONFIG_DEFRAG
+	NR_FREE_DEFRAG_POOL,
+#endif
 	NR_VM_ZONE_STAT_ITEMS };
 
 enum node_stat_item {
@@ -236,7 +248,15 @@ struct zone_reclaim_stat {
 	unsigned long		recent_rotated[2];
 	unsigned long		recent_scanned[2];
 };
-
+#ifdef CONFIG_SMART_BOOST
+struct uid_node {
+	struct uid_node __rcu *next;
+	uid_t uid;
+	unsigned int hot_count;
+	struct list_head  page_cache_list;
+	struct rcu_head rcu;
+};
+#endif
 struct lruvec {
 	struct list_head		lists[NR_LRU_LISTS];
 	struct zone_reclaim_stat	reclaim_stat;
@@ -246,6 +266,9 @@ struct lruvec {
 	unsigned long			refaults;
 #ifdef CONFIG_MEMCG
 	struct pglist_data *pgdat;
+#endif
+#ifdef CONFIG_SMART_BOOST
+	struct uid_node **uid_hash;
 #endif
 };
 

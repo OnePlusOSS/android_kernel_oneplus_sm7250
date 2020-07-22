@@ -1,0 +1,4 @@
+# oem device driver for charge
+#
+source "drivers/power/supply/Kconfig"
+
