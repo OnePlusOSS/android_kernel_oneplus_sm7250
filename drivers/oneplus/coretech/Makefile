@@ -4,6 +4,9 @@ ifeq ($(CORE_PATH),$(wildcard $(CORE_PATH)))
 obj-$(CONFIG_OPCHAIN) += uxcore/core/
 endif
 
+
+obj-$(CONFIG_MEMEX_STANDALONE) += memplus/core/
+
 #obj-$(CONFIG_MEMPLUS) += memplus/
 #CORE_PATH = $(KBUILD_SRC)/drivers/oneplus/coretech/memplus/core
 #ifeq ($(CORE_PATH),$(wildcard $(CORE_PATH)))

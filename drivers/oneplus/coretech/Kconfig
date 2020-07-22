@@ -65,3 +65,8 @@ config RATP
        help
          In low-end platform, we will restrict admission for task placement to avoid
          CPU resource contention.
+config MEMEX_STANDALONE
+	default n
+	bool "MemEX feature"
+	help
+	 MemEX feature
