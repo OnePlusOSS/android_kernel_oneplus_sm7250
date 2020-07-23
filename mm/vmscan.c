@@ -1609,6 +1609,23 @@ unsigned long coretech_reclaim_pagelist(struct list_head *page_list,
 	return nr_reclaimed;
 }
 
+#ifdef CONFIG_MEMEX_STANDALONE
+unsigned long swapout_to_zram(struct list_head *page_list,
+	struct vm_area_struct *vma)
+{
+	struct scan_control sc = {
+		.gfp_mask = GFP_KERNEL,
+		.priority = DEF_PRIORITY,
+		.may_writepage = 1,
+		.may_unmap = 1,
+		.may_swap = 1,
+		.target_vma = vma,
+	};
+
+	return coretech_reclaim_pagelist(page_list, vma, &sc);
+}
+#endif
+
 /* bin.zhong@ASTI, 2019/10/11, add for CONFIG_SMART_BOOST */
 static void smart_boost_reclaim_pages(struct lruvec *lruvec,
 					struct pglist_data *pgdat,
