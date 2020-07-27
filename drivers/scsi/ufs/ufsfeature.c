@@ -282,7 +282,7 @@ void ufsf_device_check(struct ufs_hba *hba)
 	struct ufsf_feature *ufsf = &hba->ufsf;
 	int ret, lun;
 	u32 status;
-	int is_samsung_ufs = 0;
+	int is_samsung_feature = 0;
 	struct Scsi_Host *shost;
 	struct scsi_device *sdev;
 
@@ -292,15 +292,20 @@ void ufsf_device_check(struct ufs_hba *hba)
 
 	shost = hba->host;
 	shost_for_each_device(sdev, shost) {
-		if (strncmp(sdev->vendor, "SAMSUNG", 7) == 0)
-			is_samsung_ufs = 1;
+		if ((strncmp(sdev->vendor, "SAMSUNG", 7) == 0)
+			&& ((strncmp(sdev->rev, "0500", 4) == 0)
+				|| (strncmp(sdev->rev, "1500", 4) == 0)))
+			is_samsung_feature = 1;
 	}
 
-	if (is_samsung_ufs == 0) {
+	if (is_samsung_feature == 0) {
+#if defined(CONFIG_UFSHPB)
 		ufsf->ufshpb_state = HPB_FAILED;
-
+#endif
+#if defined(CONFIG_UFSTW)
 		ufsf->tw_dev_info.tw_device = false;
 		atomic_set(&ufsf->tw_state, TW_FAILED);
+#endif
 		return;
 	}
 
