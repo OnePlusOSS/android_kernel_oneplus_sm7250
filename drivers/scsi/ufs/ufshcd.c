@@ -6842,14 +6842,19 @@ static int ufshcd_disable_ee(struct ufs_hba *hba, u16 mask)
 {
 	int err = 0;
 	u32 val;
+	int sel = 0;
 
 	if (!(hba->ee_ctrl_mask & mask))
 		goto out;
 
 	val = hba->ee_ctrl_mask & ~mask;
 	val &= MASK_EE_STATUS;
+#ifdef CONFIG_UFSFEATURE
+	if (is_samsung_feature(hba))
+		sel = 1;
+#endif
 	err = ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_WRITE_ATTR,
-			QUERY_ATTR_IDN_EE_CONTROL, 0, 1, &val);
+			QUERY_ATTR_IDN_EE_CONTROL, 0, sel, &val);
 	if (!err)
 		hba->ee_ctrl_mask &= ~mask;
 out:
@@ -6870,14 +6875,19 @@ static int ufshcd_enable_ee(struct ufs_hba *hba, u16 mask)
 {
 	int err = 0;
 	u32 val;
+	int sel = 0;
 
 	if (hba->ee_ctrl_mask & mask)
 		goto out;
 
 	val = hba->ee_ctrl_mask | mask;
 	val &= MASK_EE_STATUS;
+#ifdef CONFIG_UFSFEATURE
+	if (is_samsung_feature(hba))
+		sel = 1;
+#endif
 	err = ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_WRITE_ATTR,
-			QUERY_ATTR_IDN_EE_CONTROL, 0, 0, &val);
+			QUERY_ATTR_IDN_EE_CONTROL, 0, sel, &val);
 	if (!err)
 		hba->ee_ctrl_mask |= mask;
 out:

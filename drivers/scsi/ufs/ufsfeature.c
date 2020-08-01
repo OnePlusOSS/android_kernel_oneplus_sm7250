@@ -277,18 +277,11 @@ out:
 	return ret;
 }
 
-void ufsf_device_check(struct ufs_hba *hba)
+int is_samsung_feature(struct ufs_hba *hba)
 {
-	struct ufsf_feature *ufsf = &hba->ufsf;
-	int ret, lun;
-	u32 status;
 	int is_samsung_feature = 0;
 	struct Scsi_Host *shost;
 	struct scsi_device *sdev;
-
-	ufsf->slave_conf_cnt = 0;
-
-	ufsf->hba = hba;
 
 	shost = hba->host;
 	shost_for_each_device(sdev, shost) {
@@ -297,8 +290,20 @@ void ufsf_device_check(struct ufs_hba *hba)
 				|| (strncmp(sdev->rev, "1500", 4) == 0)))
 			is_samsung_feature = 1;
 	}
+	return is_samsung_feature;
+}
 
-	if (is_samsung_feature == 0) {
+void ufsf_device_check(struct ufs_hba *hba)
+{
+	struct ufsf_feature *ufsf = &hba->ufsf;
+	int ret, lun;
+	u32 status;
+
+	ufsf->slave_conf_cnt = 0;
+
+	ufsf->hba = hba;
+
+	if (!is_samsung_feature(hba)) {
 #if defined(CONFIG_UFSHPB)
 		ufsf->ufshpb_state = HPB_FAILED;
 #endif

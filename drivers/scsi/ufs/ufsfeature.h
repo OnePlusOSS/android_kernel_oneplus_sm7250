@@ -165,6 +165,7 @@ struct ufsf_feature {
 struct ufs_hba;
 struct ufshcd_lrb;
 
+int is_samsung_feature(struct ufs_hba *hba);
 void ufsf_device_check(struct ufs_hba *hba);
 int ufsf_check_query(__u32 opcode);
 int ufsf_query_ioctl(struct ufsf_feature *ufsf, int lun, void __user *buffer,
