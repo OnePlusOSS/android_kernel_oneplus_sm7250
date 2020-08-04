@@ -45,6 +45,7 @@
 /* @bsp 2018/07/30 add usb connector temp detect and wr*/
 #include <linux/oem/power/op_charge.h>
 #include <linux/oem/boot_mode.h>
+#include <linux/usb/usbpd.h>
 
 #define SOC_INVALID                   0x7E
 #define SOC_DATA_REG_0                0x88D /* PON_XVDD_RB_SPARE_REG */
@@ -98,6 +99,14 @@ static void op_typec_state_change_irq_handler(void);
 static int sys_boot_complete;
 static int usb_enum_check(const char *val, const struct kernel_param *kp);
 static int op_get_skin_thermal_temp(struct smb_charger *chg);
+static enum batt_status_type op_battery_status_get(struct smb_charger *chg);
+
+/* @bsp, 2020/08/04, add to detect SVID */
+static void op_register_pps_work(struct work_struct *work);
+static void pps_usbpd_connect_cb(struct usbpd_svid_handler *hdlr,
+		bool peer_usb_comm);
+static void pps_usbpd_disconnect_cb(struct usbpd_svid_handler *hdlr);
+static struct op_pps op_pps_chg;
 
 static bool is_usb_present(struct smb_charger *chg);
 static void op_chek_apsd_done_work(struct work_struct *work);
@@ -5080,6 +5089,13 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 		/* @bsp, 2019/12/20 add pd skin thermal check */
 		schedule_delayed_work(&chg->pd_current_check_work,
 				msecs_to_jiffies(200));
+
+		/* @bsp, 2020/08/04, add to detect SVID */
+		if (chg->pd_active == POWER_SUPPLY_PD_PPS_ACTIVE) {
+			op_usbpd_send_svdm(USBPD_SID, USBPD_SVDM_DISCOVER_IDENTITY,
+				SVDM_CMD_TYPE_INITIATOR, 0, NULL, 0);
+			pr_info("PPS type, Discover SVID!\n");
+		}
 	} else {
 		vote(chg->usb_icl_votable, PD_VOTER, false, 0);
 		vote(chg->limited_irq_disable_votable, CHARGER_TYPE_VOTER,
@@ -7674,6 +7690,12 @@ static void pdo_selection_check_work(struct work_struct *work)
 				schedule_delayed_work(&chg->pdo_select_check_work,
 					msecs_to_jiffies(PDO_SELECTION_INTERVAL_MS));
 		}
+		// Add check for third party PD+VOOC or PD+SVOOC adapters
+		if (!chg->swarp_online &&
+		   (pdo_select_retry_count == 0 || pdo_select_retry_count >= 3)) {
+			cancel_delayed_work(&chg->check_switch_dash_work);
+			schedule_delayed_work(&chg->check_switch_dash_work, msecs_to_jiffies(1000));
+		}
 	}
 }
 
@@ -7693,7 +7715,7 @@ static void pd_skin_thermal_check_work(struct work_struct *work)
 	bool is_skin_temp_medium;
 	int ua, icl;
 
-	if (!chg->pd_active)
+	if (!chg->pd_active || chg->dash_present || chg->swarp_online)
 		return;
 
 	is_call_on = check_call_on_status();
@@ -7722,6 +7744,59 @@ static void pd_skin_thermal_check_work(struct work_struct *work)
 
 	schedule_delayed_work(&chg->pd_current_check_work,
 			msecs_to_jiffies(PD_CHECK_INTERVAL_PERIOD));
+}
+
+/* @bsp, 2020/08/04, add to detect SVID */
+static void pps_usbpd_connect_cb(struct usbpd_svid_handler *hdlr,
+		bool peer_usb_comm)
+{
+	struct smb_charger *chg = g_chg;
+
+	chg->swarp_online = 1;
+	//if (!chg->fastchg_switch_disable && !chg->dash_present) {
+	if (!chg->dash_present) {
+		cancel_delayed_work(&chg->check_switch_dash_work);
+		schedule_delayed_work(&chg->check_switch_dash_work, 0);
+	}
+	pr_info("SWARP adapter connected!\n");
+}
+
+static void pps_usbpd_disconnect_cb(struct usbpd_svid_handler *hdlr)
+{
+	struct smb_charger *chg = g_chg;
+
+	chg->swarp_online = 0;
+	pr_info("SWARP adapter disconnected!\n");
+}
+
+static void op_register_pps_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct smb_charger *chg = container_of(dwork,
+				struct smb_charger, register_pps_work);
+	struct op_pps *swarp_pps = &op_pps_chg;
+	int rc = 0;
+	const char *pd_phandle = "qcom,op-pps-usbpd-detection";
+	struct usbpd *pd = NULL;
+
+	pd = devm_usbpd_get_by_phandle(chg->dev, pd_phandle);
+	if (IS_ERR(pd)) {
+		pr_err("op pps usbpd phandle failed (%ld)\n", PTR_ERR(pd));
+		rc = PTR_ERR(pd);
+		schedule_delayed_work(&chg->register_pps_work, msecs_to_jiffies(1000));
+	} else {
+		swarp_pps->pd = pd;
+		swarp_pps->svid_handler.svid = OP_SVID;
+		swarp_pps->svid_handler.vdm_received = NULL;
+		swarp_pps->svid_handler.connect = pps_usbpd_connect_cb;
+		swarp_pps->svid_handler.svdm_received = NULL;
+		swarp_pps->svid_handler.disconnect = pps_usbpd_disconnect_cb;
+		rc = usbpd_register_svid(swarp_pps->pd, &swarp_pps->svid_handler);
+		if (rc)
+			pr_err("pps pd registration failed\n");
+		pr_err("pps pd registration success\n");
+	}
+
 }
 
 irqreturn_t smblib_handle_aicl_done(int irq, void *data)
@@ -8300,11 +8375,6 @@ static void set_usb_switch(struct smb_charger *chg, bool enable)
 		pr_err("no fast_charger register found\n");
 		return;
 	}
-	if (chg->pd_active) {
-		pr_info("%s:pd_active return\n", __func__);
-		return;
-	}
-
 	if (enable) {
 		pr_err("switch on fastchg\n");
 		chg->switch_on_fastchg = true;
@@ -8443,12 +8513,6 @@ static void retrigger_dash_work(struct work_struct *work)
 	}
 	if (chg->chg_disabled) {
 		chg->ck_dash_count = 0;
-		return;
-	}
-
-	if (chg->pd_active) {
-		chg->ck_dash_count = 0;
-		pr_info("pd_active return retrigger_dash\n");
 		return;
 	}
 	if (chg->ck_dash_count >= DASH_CHECK_COUNT) {
@@ -11918,6 +11982,9 @@ int smblib_init(struct smb_charger *chg)
 					smblib_pr_lock_clear_work);
 	timer_setup(&chg->apsd_timer, apsd_timer_cb, 0);
 
+	/* @bsp, 2020/08/04, add to detect SVID */
+	INIT_DELAYED_WORK(&chg->register_pps_work, op_register_pps_work);
+	schedule_delayed_work(&chg->register_pps_work, msecs_to_jiffies(2000));
 	if (chg->wa_flags & CHG_TERMINATION_WA) {
 		INIT_WORK(&chg->chg_termination_work,
 					smblib_chg_termination_work);

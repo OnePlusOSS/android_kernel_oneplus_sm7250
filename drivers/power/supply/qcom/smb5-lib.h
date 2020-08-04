@@ -18,6 +18,7 @@
 #include "battery.h"
 /* @bsp, 2019/07/05 Battery & Charging porting */
 #include <linux/oem/power/oem_external_fg.h>
+#include <linux/usb/usbpd.h>
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -442,7 +443,7 @@ struct smb_charger {
 	int			weak_chg_icl_ua;
 	u32			sdam_base;
 	bool			pd_not_supported;
-
+	int                     swarp_online;
 	/* locks */
 	struct mutex		smb_lock;
 	struct mutex		ps_change_lock;
@@ -543,6 +544,8 @@ struct smb_charger {
 	struct delayed_work	connecter_recovery_work;
 	struct delayed_work	pd_current_check_work;
 	struct delayed_work	pdo_select_check_work;
+	/* @bsp, 2020/08/04, add to detect SVID */
+	struct delayed_work register_pps_work;
 	struct work_struct	otg_switch_work;
 	struct wakeup_source	chg_wake_lock;
 
@@ -853,6 +856,12 @@ struct smb_charger {
 	bool			chg_wake_lock_on;
 };
 
+/* @bsp, 2020/08/04, add to detect SVID */
+struct op_pps {
+	struct usbpd *pd;
+	struct usbpd_svid_handler svid_handler;
+};
+
 /* @bsp, 2019/07/05 Battery & Charging porting */
 int smblib_set_prop_charge_parameter_set(struct smb_charger *chg);
 extern void set_mcu_en_gpio_value(int value);
@@ -867,7 +876,10 @@ extern struct drm_panel *lcd_active_panel;
 
 /* @bsp, 2020/04/26 add to support pd pdo selection */
 extern int op_pdo_select(int vbus_mv, int ibus_ma);
-
+/* @bsp, 2020/08/04, add to detect SVID */
+extern int op_usbpd_send_svdm(u16 svid, u8 cmd,
+		enum usbpd_svdm_cmd_type cmd_type, int obj_pos,
+		const u32 *vdos, int num_vdos);
 /* @bsp, 2019/07/05 Battery & Charging porting */
 void op_bus_vote(int disable);
 int get_prop_fast_adapter_update(struct smb_charger *chg);

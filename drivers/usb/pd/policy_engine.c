@@ -1413,6 +1413,7 @@ static void handle_vdm_resp_ack(struct usbpd *pd, u32 *vdos, u8 num_vdos,
 	u16 svid, *psvid;
 	u8 cmd = SVDM_HDR_CMD(vdm_hdr);
 	struct usbpd_svid_handler *handler;
+	u32 op_svid;
 
 	switch (cmd) {
 	case USBPD_SVDM_DISCOVER_IDENTITY:
@@ -1422,6 +1423,24 @@ static void handle_vdm_resp_ack(struct usbpd *pd, u32 *vdos, u8 num_vdos,
 		if (!num_vdos) {
 			usbpd_dbg(&pd->dev, "Discarding Discover ID response with no VDOs\n");
 			break;
+		}
+
+		/* @bsp, 2020/08/04, add to detect SVID */
+		if (num_vdos == 3) {
+			op_svid = vdos[0] & 0xffff;
+
+			usbpd_info(&pd->dev, "OP SVID discovered: 0x%04x\n", op_svid);
+			if (op_svid == OP_SVID) {
+				handler = find_svid_handler(pd, op_svid);
+				if (handler) {
+					usbpd_info(&pd->dev, "op_svid SVID: 0x%04x connected\n",
+							handler->svid);
+					handler->connect(handler,
+							pd->peer_usb_comm);
+					handler->discovered = true;
+					break;
+				}
+			}
 		}
 
 		if (!pd->in_explicit_contract)
@@ -4671,6 +4690,19 @@ static void usbpd_release(struct device *dev)
 }
 
 static int num_pd_instances;
+
+/* @bsp, 2020/08/04, add to detect SVID */
+int op_usbpd_send_svdm(u16 svid, u8 cmd, enum usbpd_svdm_cmd_type cmd_type,
+		int obj_pos, const u32 *vdos, int num_vdos)
+{
+	struct usbpd *pd = pd_p;
+	u32 svdm_hdr = SVDM_HDR(svid, 0, obj_pos, cmd_type, cmd);
+
+	usbpd_info(&pd->dev, "Send svdm!! svid:%x cmd:%x cmd_type:%x svdm_hdr:%x\n",
+			svid, cmd, cmd_type, svdm_hdr);
+	return usbpd_send_vdm(pd, svdm_hdr, vdos, num_vdos);
+}
+EXPORT_SYMBOL(op_usbpd_send_svdm);
 
 /* @bsp, 2020/04/26 add to support pd pdo selection */
 int op_pdo_select(int vbus_mv, int ibus_ma)
