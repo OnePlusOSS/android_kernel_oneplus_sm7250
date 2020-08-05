@@ -650,6 +650,7 @@ struct smb_charger {
 	bool				revert_boost_trigger;
 	bool               switch_on_fastchg;
 	bool				probe_done;
+	bool				disconnect_pd;
 	int				ffc_count;
 	int				FFC_TEMP_T1;
 	int				FFC_TEMP_T2;

@@ -4163,7 +4163,8 @@ static int smblib_get_prop_typec_mode(struct smb_charger *chg)
 inline int smblib_get_usb_prop_typec_mode(struct smb_charger *chg,
 				union power_supply_propval *val)
 {
-	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
+	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB ||
+	    chg->disconnect_pd)
 		val->intval = POWER_SUPPLY_TYPEC_NONE;
 	else
 		val->intval = chg->typec_mode;
@@ -8186,6 +8187,18 @@ void update_fast_switch_off_status(void)
 				g_chg->switch_on_fastchg);
 }
 
+void update_disconnect_pd_status(bool en)
+{
+	if (g_chg == NULL) {
+		pr_err("smbchg not found\n");
+		return;
+	}
+
+	g_chg->disconnect_pd = en;
+	power_supply_changed(g_chg->usb_psy);
+	pr_info("disconnect_pd is(%d)\n", g_chg->disconnect_pd);
+}
+
 static bool set_prop_fast_switch_to_normal_false(struct smb_charger *chg)
 {
 	if (fast_charger && fast_charger->set_switch_to_noraml_false)
@@ -8295,6 +8308,7 @@ static void set_usb_switch(struct smb_charger *chg, bool enable)
 	if (enable) {
 		pr_err("switch on fastchg\n");
 		chg->switch_on_fastchg = true;
+		chg->disconnect_pd = true;
 		if (chg->boot_usb_present && chg->re_trigr_dash_done) {
 			vote(chg->usb_icl_votable, AICL_RERUN_VOTER,
 					true, 0);
@@ -8318,6 +8332,7 @@ static void set_usb_switch(struct smb_charger *chg, bool enable)
 	} else {
 		pr_err("switch off fastchg\n");
 		chg->switch_on_fastchg = false;
+		update_disconnect_pd_status(false);
 		usb_sw_gpio_set(0);
 		mcu_en_gpio_set(1);
 	}

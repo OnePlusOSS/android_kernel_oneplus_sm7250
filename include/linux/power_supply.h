@@ -402,6 +402,7 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	/* Property to initate DPDM recovery */
 	POWER_SUPPLY_PROP_START_DPDM_RECOVERY,
+	POWER_SUPPLY_PROP_DISCONNECT_PD,
 };
 
 enum power_supply_type {
