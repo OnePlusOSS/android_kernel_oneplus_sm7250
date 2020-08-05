@@ -145,5 +145,6 @@ void update_fast_switch_off_status(void);
 bool check_call_on_status(void);
 bool check_lcd_on_status(void);
 void check_skin_thermal_temp(void);
+void update_disconnect_pd_status(bool en);
 #endif
 

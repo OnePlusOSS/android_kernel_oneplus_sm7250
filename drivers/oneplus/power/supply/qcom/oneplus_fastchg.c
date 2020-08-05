@@ -973,6 +973,7 @@ void switch_mode_to_normal(void)
 	mcu_en_gpio_set(1);
 	msm_cpuidle_set_sleep_disable(false);
 	op_check_charger_collapse_rerun_aicl();
+	update_disconnect_pd_status(false);
 }
 
 static void update_fast_chg_started(void)
