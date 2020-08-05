@@ -39,7 +39,6 @@
 
 #define CCI_TIMEOUT msecs_to_jiffies(1500)
 
-#define NUM_MASTERS 2
 #define NUM_QUEUES 2
 
 #define CCI_PINCTRL_STATE_DEFAULT "cci_default"
@@ -59,6 +58,10 @@
 #define CCI_I2C_MAX_READ 8192
 #define CCI_I2C_MAX_WRITE 8192
 #define CCI_I2C_MAX_BYTE_COUNT 65535
+
+#define CCI_VERSION_1_2_9 0x10020009
+#define CCI_I2C_QUEUE_0_SIZE_V_1_2 64
+#define CCI_I2C_QUEUE_1_SIZE_V_1_2 16
 
 #define CAMX_CCI_DEV_NAME "cam-cci-driver"
 
@@ -138,6 +141,7 @@ struct cam_cci_master_info {
 	struct semaphore master_sem;
 	bool is_first_req;
 	uint16_t freq_ref_cnt;
+	bool is_initilized;
 };
 
 struct cam_cci_clk_params_t {
@@ -172,6 +176,7 @@ enum cam_cci_state_t {
  * @cci_clk_info:               CCI clock information
  * @cam_cci_i2c_queue_info:     CCI queue information
  * @i2c_freq_mode:              I2C frequency of operations
+ * @master_active_slave:        Number of active/connected slaves for master
  * @cci_clk_params:             CCI hw clk params
  * @cci_gpio_tbl:               CCI GPIO table
  * @cci_gpio_tbl_size:          GPIO table size
@@ -204,9 +209,10 @@ struct cci_device {
 	uint8_t ref_count;
 	enum cam_cci_state_t cci_state;
 	struct cam_cci_i2c_queue_info
-		cci_i2c_queue_info[NUM_MASTERS][NUM_QUEUES];
-	struct cam_cci_master_info cci_master_info[NUM_MASTERS];
-	enum i2c_freq_mode i2c_freq_mode[NUM_MASTERS];
+		cci_i2c_queue_info[MASTER_MAX][NUM_QUEUES];
+	struct cam_cci_master_info cci_master_info[MASTER_MAX];
+	enum i2c_freq_mode i2c_freq_mode[MASTER_MAX];
+	uint8_t master_active_slave[MASTER_MAX];
 	struct cam_cci_clk_params_t cci_clk_params[I2C_MAX_MODES];
 	struct msm_pinctrl_info cci_pinctrl;
 	uint8_t cci_pinctrl_status;

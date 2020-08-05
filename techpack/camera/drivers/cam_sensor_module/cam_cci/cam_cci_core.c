@@ -1652,14 +1652,15 @@ static int32_t cam_cci_i2c_set_sync_prms(struct v4l2_subdev *sd,
 	return rc;
 }
 
-static int32_t cam_cci_release(struct v4l2_subdev *sd)
+static int32_t cam_cci_release(struct v4l2_subdev *sd,
+	enum cci_i2c_master_t master)
 {
 	uint8_t rc = 0;
 	struct cci_device *cci_dev;
 
 	cci_dev = v4l2_get_subdevdata(sd);
 
-	rc = cam_cci_soc_release(cci_dev);
+	rc = cam_cci_soc_release(cci_dev, master);
 	if (rc < 0) {
 		CAM_ERR(CAM_CCI, "Failed in releasing the cci: %d", rc);
 		return rc;
@@ -1771,7 +1772,7 @@ int32_t cam_cci_core_cfg(struct v4l2_subdev *sd,
 		break;
 	case MSM_CCI_RELEASE:
 		mutex_lock(&cci_dev->init_mutex);
-		rc = cam_cci_release(sd);
+		rc = cam_cci_release(sd, master);
 		mutex_unlock(&cci_dev->init_mutex);
 		break;
 	case MSM_CCI_I2C_READ:
@@ -1881,6 +1882,7 @@ int32_t cam_cci_control_interface(void* control)
     struct v4l2_subdev *sd = cam_cci_get_subdev(CCI_DEVICE_1);
     struct cci_device *cci_dev = v4l2_get_subdevdata(sd);
     struct camera_cci_transfer* pControl = (struct camera_cci_transfer*)control;
+    enum cci_i2c_master_t master = MASTER_MAX;
 
     switch (pControl->cmd) {
     case CAMERA_CCI_INIT:
@@ -1898,7 +1900,7 @@ int32_t cam_cci_control_interface(void* control)
         break;
     case CAMERA_CCI_RELEASE:
         mutex_lock(&cci_dev->init_mutex);
-        rc = cam_cci_release(sd);
+        rc = cam_cci_release(sd, master);
         mutex_unlock(&cci_dev->init_mutex);
         CAM_INFO(CAM_CCI, "cci release cmd,rc=%d",rc);
         break;
