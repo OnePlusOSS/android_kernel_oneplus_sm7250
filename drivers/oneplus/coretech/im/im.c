@@ -103,7 +103,8 @@ static inline void im_tagging(struct task_struct *task, int idx)
 			task->im_flag |= IM_RENDER;
 			break;
 		case IM_ID_CRENDER:
-			task->im_flag |= IM_CRENDER;
+			/*mark this to save power for DOU test*/
+			//task->im_flag |= IM_CRENDER;
 			break;
 		}
 	}
