@@ -4280,6 +4280,174 @@ static const struct file_operations proc_ship_mode_operations = {
 };
 #endif
 
+/* @bsp, 2020/06/05 Battery & Charging add for skin_thermal online config */
+static ssize_t proc_skin_thresh_disp_off_read(struct file *file, char __user *buf,
+					    size_t count, loff_t *ppos)
+{
+	int ret = 0;
+	char page[64];
+	int len = 64;
+	struct smb_charger *chg = g_chip;
+
+	if (chg == NULL) {
+		pr_err("smb driver is not ready");
+		return -ENODEV;
+	}
+
+	memset(page, 0, len);
+	len = snprintf(page, len, "Hi:%d,pre-Hi:%d,Med:%d,Nor:%d\n",
+		chg->skin_thermal_high_threshold_disp_off,
+		chg->skin_thermal_pre_high_threshold_disp_off,
+		chg->skin_thermal_medium_threshold_disp_off,
+		chg->skin_thermal_normal_threshold_disp_off);
+	ret = simple_read_from_buffer(buf, count, ppos, page, len);
+
+	return ret;
+}
+
+static ssize_t proc_skin_thresh_disp_off_write(struct file *file, const char __user *buf,
+				      size_t count, loff_t *lo)
+{
+	char buffer[32] = { 0 };
+	struct smb_charger *chg = g_chip;
+	int hi_val, pre_hi_val, med_val, nor_val;
+	int ret = 0;
+
+	if (chg == NULL) {
+		pr_err("smb driver is not ready");
+		return -ENODEV;
+	}
+
+	if (count > 32) {
+		pr_err("input too many words.");
+		return -EFAULT;
+	}
+
+	if (copy_from_user(buffer, buf, count)) {
+		pr_err("copy parameter from user error.\n");
+		return -EFAULT;
+	}
+
+	pr_info("buffer=%s", buffer);
+	ret = sscanf(buffer, "%d %d %d %d", &hi_val, &pre_hi_val, &med_val, &nor_val);
+	pr_err("hi_val=%d, pre_hi_val=%d, med_val=%d, nor_val=%d",
+		hi_val, pre_hi_val, med_val, nor_val);
+
+
+	if (ret == 4) {
+		if ((hi_val > pre_hi_val)
+			&& (pre_hi_val > med_val)
+			&& (med_val > nor_val)) {
+			chg->skin_thermal_high_threshold_disp_off = hi_val;
+			chg->skin_thermal_pre_high_threshold_disp_off = pre_hi_val;
+			chg->skin_thermal_medium_threshold_disp_off = med_val;
+			chg->skin_thermal_normal_threshold_disp_off = nor_val;
+		} else {
+			pr_err("val not bigger one by one.");
+			return -EINVAL;
+		}
+	} else {
+		pr_err("need four decimal number.");
+		return -EINVAL;
+	}
+	return count;
+}
+
+static const struct file_operations proc_skin_thresh_disp_off_ops = {
+	.read = proc_skin_thresh_disp_off_read,
+	.write = proc_skin_thresh_disp_off_write,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+};
+
+static ssize_t proc_skin_thresh_disp_on_read(struct file *file, char __user *buf,
+					    size_t count, loff_t *ppos)
+{
+	int ret = 0;
+	char page[100];
+	int len = 100;
+	struct smb_charger *chg = g_chip;
+
+	if (chg == NULL) {
+		pr_err("smb driver is not ready");
+		return -ENODEV;
+	}
+
+	memset(page, 0, len);
+	len = snprintf(page, len, "Hi:%d,pre-Hi:%d,Litt-Hi:%d,pre-Litt-Hi:%d,Med:%d,Nor:%d\n",
+		chg->skin_thermal_high_threshold_disp_on,
+		chg->skin_thermal_pre_high_threshold_disp_on,
+		chg->skin_thermal_little_high_threshold_disp_on,
+		chg->skin_thermal_pre_little_high_threshold_disp_on,
+		chg->skin_thermal_medium_threshold_disp_on,
+		chg->skin_thermal_normal_threshold_disp_on);
+	ret = simple_read_from_buffer(buf, count, ppos, page, len);
+
+	return ret;
+}
+
+static ssize_t proc_skin_thresh_disp_on_write(struct file *file, const char __user *buf,
+				      size_t count, loff_t *lo)
+{
+	char buffer[48] = { 0 };
+	struct smb_charger *chg = g_chip;
+	int hi_val, pre_hi_val, little_hi_val, pre_little_hi_val, med_val, nor_val;
+	int ret = 0;
+
+	if (chg == NULL) {
+		pr_err("smb driver is not ready");
+		return -ENODEV;
+	}
+
+	if (count > 48) {
+		pr_err("input too many words.");
+		return -EFAULT;
+	}
+
+	if (copy_from_user(buffer, buf, count)) {
+		pr_err("copy parameter from user error.\n");
+		return -EFAULT;
+	}
+
+	pr_info("buffer=%s", buffer);
+	ret = sscanf(buffer, "%d %d %d %d %d %d",
+		     &hi_val, &pre_hi_val,
+		     &little_hi_val, &pre_little_hi_val,
+		     &med_val, &nor_val);
+	pr_err("hi_val=%d, pre_hi_val=%d, little_hi_val=%d, pre_little_hi_val=%d,med_val=%d, nor_val=%d",
+		hi_val, pre_hi_val, little_hi_val, pre_little_hi_val, med_val, nor_val);
+
+	if (ret == 6) {
+		if ((hi_val > pre_hi_val)
+			&& (little_hi_val > pre_little_hi_val)
+			&& (pre_hi_val > pre_little_hi_val)
+			&& (pre_little_hi_val > med_val)
+			&& (med_val > nor_val)) {
+			chg->skin_thermal_high_threshold_disp_on = hi_val;
+			chg->skin_thermal_pre_high_threshold_disp_on = pre_hi_val;
+			chg->skin_thermal_little_high_threshold_disp_on = little_hi_val;
+			chg->skin_thermal_pre_little_high_threshold_disp_on = pre_little_hi_val;
+			chg->skin_thermal_medium_threshold_disp_on = med_val;
+			chg->skin_thermal_normal_threshold_disp_on = nor_val;
+		} else {
+			pr_err("val not bigger one by one.");
+			return -EINVAL;
+		}
+	} else {
+		pr_err("need 6 decimal number.");
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static const struct file_operations proc_skin_thresh_disp_on_ops = {
+	.read = proc_skin_thresh_disp_on_read,
+	.write = proc_skin_thresh_disp_on_write,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+};
+
 /* @bsp, 2018/07/26 Enable external stm6620 ship mode*/
 static int op_ship_mode_gpio_request(struct smb_charger *chip)
 {
@@ -4670,6 +4838,12 @@ if (0) {
 	if (!proc_create("ship_mode", 0644, NULL, &proc_ship_mode_operations))
 		pr_err("Failed to register proc interface\n");
 #endif
+	if (!proc_create("chg_skin_lcdoff_thermal_thd", 0644, NULL, &proc_skin_thresh_disp_off_ops))
+		pr_err("Failed to register chg_skin_lcdoff_thermal_thd proc interface\n");
+
+	if (!proc_create("chg_skin_thermal_thd", 0644, NULL, &proc_skin_thresh_disp_on_ops))
+		pr_err("Failed to register chg_skin_thermal_thd proc interface\n");
+
 	rc = smblib_get_prop_usb_present(chg, &val);
 	if (rc < 0) {
 		pr_err("Couldn't get usb present rc=%d\n", rc);
