@@ -125,6 +125,8 @@ MODULE_PARM_DESC(sys_boot_complete, "sys_boot_complete");
 	|| typec_mode == POWER_SUPPLY_TYPEC_SOURCE_HIGH)	\
 	&& (!chg->typec_legacy || chg->typec_legacy_use_rp_icl))
 
+static bool lcd_status;
+
 static void update_sw_icl_max(struct smb_charger *chg, int pst);
 static int smblib_get_prop_typec_mode(struct smb_charger *chg);
 enum oem_dddboot_mode {
@@ -9940,28 +9942,23 @@ void aging_test_check_aicl(struct smb_charger *chg)
 	}
 }
 
-static void handle_dash_skin_therm_temp(struct smb_charger *chg, int batt_temp)
+static void handle_dash_skin_therm_temp(struct smb_charger *chg)
 {
-	int batt_curr_ma = 0;
-	union power_supply_propval val = {0};
-
-	if (!chg->oem_lcd_is_on) { // LCD Off
-		smblib_get_batt_current_now(chg, &val);
-		batt_curr_ma = val.intval/1000;
-		pr_debug("batt: current=%d,temp=%d\n", batt_curr_ma, batt_temp);
-
+	// Store the current lcd status to use it for skin thermal handling
+	// and also use the same status while controlling charge current to
+	// be in sync
+	lcd_status = chg->oem_lcd_is_on;
+	if (!lcd_status) { // LCD Off
 		// Skin therm high
 		if (!chg->is_skin_thermal_high) {
-			if ((chg->skin_thermal_temp >=
-			     chg->skin_thermal_high_threshold_disp_off) &&
-			     batt_temp >= 380) { // >=42
+			if (chg->skin_thermal_temp >=
+			     chg->skin_thermal_high_threshold_disp_off) { // >=42
 				chg->is_skin_thermal_high = true;
 				chg->is_skin_thermal_medium = false;
 			}
 		} else {
-			if ((chg->skin_thermal_temp <
-			     chg->skin_thermal_pre_high_threshold_disp_off) &&
-			     batt_temp < 380) { // < 38
+			if (chg->skin_thermal_temp <
+			     chg->skin_thermal_pre_high_threshold_disp_off) { // < 38
 				chg->is_skin_thermal_medium = true;
 				chg->is_skin_thermal_high = false;
 			}
@@ -9970,16 +9967,13 @@ static void handle_dash_skin_therm_temp(struct smb_charger *chg, int batt_temp)
 		// Skin thermal medium
 		if (!chg->is_skin_thermal_medium) {
 			if (!chg->is_skin_thermal_high &&
-			     ((chg->skin_thermal_temp >=
-			       chg->skin_thermal_medium_threshold_disp_off) ||
-			       batt_temp >= 393 ||
-			       (batt_temp >= 390 && batt_curr_ma < -4900))) { // >=39
+			     chg->skin_thermal_temp >=
+			     chg->skin_thermal_medium_threshold_disp_off) { // >=39
 				chg->is_skin_thermal_medium = true;
 			}
 		} else {
 			if (chg->skin_thermal_temp <
-			    chg->skin_thermal_normal_threshold_disp_off &&
-			    batt_temp < 370) { // <37
+			    chg->skin_thermal_normal_threshold_disp_off) { // <37
 				chg->is_skin_thermal_medium = false;
 			}
 		}
@@ -10086,7 +10080,7 @@ static int op_get_skin_thermal_temp(struct smb_charger *chg)
 			chg->is_skin_thermal_medium = true;
 		}
 	} else { // Dash charging skin therm
-		handle_dash_skin_therm_temp(chg, batt_temp);
+		handle_dash_skin_therm_temp(chg);
 	}
 	pr_info("skin_thermal_temp=(%d),pd_active(%d)\n",
 		chg->skin_thermal_temp,
@@ -10160,8 +10154,8 @@ bool check_call_on_status(void)
 
 bool check_lcd_on_status(void)
 {
-	pr_info("LCD status=(%d)\n", g_chg->oem_lcd_is_on);
-	return g_chg->oem_lcd_is_on;
+	pr_info("LCD status=(%d)\n", lcd_status);
+	return lcd_status;
 }
 
 /* @bsp 2018/07/30 add usb connector temp detect and wr*/
