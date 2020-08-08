@@ -1278,42 +1278,44 @@ void op_adapter_init(struct op_adapter_chip *chip)
 
 static void handle_dash_charge_current(struct fastchg_device_info *di)
 {
-	if (di->is_call_on) { // Normal call or Video call on
-		dash_write_4bits(di, CURRENT_LIMIT_1);
-		pr_err("CALLON:dash command sent %d for 2A\n", CURRENT_LIMIT_1);
-	} else { // Non-call
-		if (di->is_lcd_on) {
-			if (di->is_skin_thermal_high) {
-				dash_write_4bits(di, CURRENT_LIMIT_1);
-				pr_err("HIGH:dash command sent %d for 2A\n",
+	// Handle the charge current when LCD on
+	if (di->is_lcd_on) {
+		if (di->is_call_on) { // Normal call or Video call on
+			dash_write_4bits(di, CURRENT_LIMIT_6);
+			pr_err("CALLON:dash command sent %d for 6A\n", CURRENT_LIMIT_6);
+		} else if (di->is_skin_thermal_high) {
+			dash_write_4bits(di, CURRENT_LIMIT_1);
+			pr_err("HIGH:dash command sent %d for 2A\n",
 					CURRENT_LIMIT_1);
-			} else if (di->is_skin_thermal_little_high) {
-				dash_write_4bits(di, CURRENT_LIMIT_3);
-				pr_err("LITTLE HIGH:dash command sent %d for 3A\n",
+		} else if (di->is_skin_thermal_little_high) {
+			dash_write_4bits(di, CURRENT_LIMIT_3);
+			pr_err("LITTLE HIGH:dash command sent %d for 3A\n",
 					CURRENT_LIMIT_3);
-			} else if (di->is_skin_thermal_medium) {
-				dash_write_4bits(di, CURRENT_LIMIT_4);
-				pr_err("MEDIUM:dash command sent %d for 4A\n",
+		} else if (di->is_skin_thermal_medium) {
+			dash_write_4bits(di, CURRENT_LIMIT_4);
+			pr_err("MEDIUM:dash command sent %d for 4A\n",
 					CURRENT_LIMIT_4);
-			} else {
-				dash_write_4bits(di, CURRENT_LIMIT_5);
-				pr_err("NORMAL:dash command sent %d for 5A\n",
-					CURRENT_LIMIT_5);
-			}
 		} else {
-			if (di->is_skin_thermal_high) {
-				dash_write_4bits(di, CURRENT_LIMIT_2);
-				pr_err("HIGH:dash command sent %d for 2.5A\n",
-					CURRENT_LIMIT_2);
-			} else if (di->is_skin_thermal_medium) {
-				dash_write_4bits(di, CURRENT_LIMIT_3);
-				pr_err("MEDIUM:dash command sent %d for 3A\n",
-					CURRENT_LIMIT_3);
-			} else {
-				dash_write_4bits(di, CURRENT_LIMIT_6);
-				pr_err("NORMAL:dash command sent %d for 6A\n",
+			dash_write_4bits(di, CURRENT_LIMIT_6);
+			pr_err("NORMAL:dash command sent %d for 6A\n",
 					CURRENT_LIMIT_6);
-			}
+		}
+	} else { // Handle the charge current when LCD is off
+		if (di->is_call_on) { // Normal call or Video call on
+			dash_write_4bits(di, CURRENT_LIMIT_1);
+			pr_err("CALLON:dash command sent %d for 2A\n", CURRENT_LIMIT_1);
+		} else if (di->is_skin_thermal_high) {
+			dash_write_4bits(di, CURRENT_LIMIT_2);
+			pr_err("HIGH:dash command sent %d for 2.5A\n",
+					CURRENT_LIMIT_2);
+		} else if (di->is_skin_thermal_medium) {
+			dash_write_4bits(di, CURRENT_LIMIT_3);
+			pr_err("MEDIUM:dash command sent %d for 3A\n",
+					CURRENT_LIMIT_3);
+		} else {
+			dash_write_4bits(di, CURRENT_LIMIT_6);
+			pr_err("NORMAL:dash command sent %d for 6A\n",
+					CURRENT_LIMIT_6);
 		}
 	}
 }
