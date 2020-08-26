@@ -4952,23 +4952,6 @@ int dsi_panel_switch(struct dsi_panel *panel)
 
 	DSI_ERR("panel->cur_mode->timing->h_active = %d\n", panel->cur_mode->timing.h_active);
 
-	if((strcmp(panel->name, "samsung ams644vk04 fhd cmd mode dsc dsi panel") == 0) ) {
-		if (mode_fps == 90) {
-			rc = dsi_panel_tx_gamma_cmd_set(panel, DSI_GAMMA_CMD_SET_SWITCH_90HZ);
-			DSI_ERR("Send DSI_GAMMA_CMD_SET_SWITCH_90HZ cmds\n");
-			if (rc)
-				DSI_ERR("[%s] Failed to send DSI_GAMMA_CMD_SET_SWITCH_90HZ cmds, rc=%d\n",
-					panel->name, rc);
-		}
-		else {
-			rc = dsi_panel_tx_gamma_cmd_set(panel, DSI_GAMMA_CMD_SET_SWITCH_60HZ);
-			DSI_ERR("Send DSI_GAMMA_CMD_SET_SWITCH_60HZ cmds\n");
-			if (rc)
-				DSI_ERR("[%s] Failed to send DSI_GAMMA_CMD_SET_SWITCH_60HZ cmds, rc=%d\n",
-					panel->name, rc);
-		}
-	}
-
 	mutex_unlock(&panel->panel_lock);
 	panel->panel_switch_status = false;
 	return rc;
@@ -5028,15 +5011,6 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		       panel->name, rc);
 	else
 		panel->panel_initialized = true;
-	if ((strcmp(panel->name, "samsung ams644vk04 ana6705 fhd cmd mode dsc dsi panel") == 0)) {
-		if (mode_fps == 60) {
-			rc = dsi_panel_tx_gamma_cmd_set(panel, DSI_GAMMA_CMD_SET_SWITCH_60HZ);
-			DSI_ERR("Send DSI_GAMMA_CMD_SET_SWITCH_60HZ cmds\n");
-			if (rc)
-				DSI_ERR("[%s] Failed to send DSI_GAMMA_CMD_SET_SWITCH_60HZ cmds, rc=%d\n",
-					panel->name, rc);
-		}
-	}
 
 	if (((strcmp(panel->name, "samsung ams644vk04 fhd cmd mode dsc dsi panel") == 0)
 		|| (strcmp(panel->name, "samsung ana6706 dsc cmd mode panel") == 0))
