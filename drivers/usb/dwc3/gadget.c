@@ -2094,10 +2094,6 @@ static int dwc3_gadget_set_selfpowered(struct usb_gadget *g,
 	return 0;
 }
 
-/* @bsp, 2019/09/18 usb & PD porting */
-/* Add to fix CDP detected as SDP after reboot */
-#define DWC3_SOFT_RESET_TIMEOUT 10 /* 10 msec */
-
 /**
  * dwc3_device_core_soft_reset - Issues device core soft reset
  * @dwc: pointer to our context structure
@@ -2142,7 +2138,6 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 {
 	u32			reg, reg1;
 	u32			timeout = 1500;
-	ktime_t start, diff;
 
 	dbg_event(0xFF, "run_stop", is_on);
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
@@ -2154,26 +2149,6 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 
 		if (dwc->revision >= DWC3_REVISION_194A)
 			reg &= ~DWC3_DCTL_KEEP_CONNECT;
-/* @bsp, 2019/09/18 usb & PD porting */
-/* Add to fix CDP detected as SDP after reboot */
-		start = ktime_get();
-		/* issue device SoftReset */
-		dwc3_writel(dwc->regs, DWC3_DCTL,
-			reg | DWC3_DCTL_CSFTRST);
-		do {
-			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-			if (!(reg & DWC3_DCTL_CSFTRST))
-				break;
-
-			diff = ktime_sub(ktime_get(), start);
-			/* poll for max. 10ms */
-			if (ktime_to_ms(diff) > DWC3_SOFT_RESET_TIMEOUT) {
-				printk_ratelimited(KERN_ERR
-					"%s:core Reset Timed Out\n", __func__);
-				break;
-			}
-			cpu_relax();
-		} while (true);
 		dwc3_event_buffers_setup(dwc);
 		__dwc3_gadget_start(dwc);
 
