@@ -434,6 +434,7 @@
 	qcom,otg-cl-ua = <1500000>;
 	op,sw-iterm-ma = <310>;
 	op,sw-check-full-enable;
+	qcom,op-pps-usbpd-detection = <&pm7250b_pdphy>;
 	/*ffc temp region*/
 	ffc-pre-normal-decidegc = <120>;
 	ffc-normal-decidegc = <350>;
