@@ -280,6 +280,17 @@
 			bias-pull-up;
 		};
 	};
+	ab_id0_suspend: ab_id0_suspend {
+		mux {
+			pins = "gpio58";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio58";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+	};
 	ab_id0_sleep: ab_id0_sleep {
 		mux {
 			pins = "gpio58";
@@ -599,9 +610,10 @@
  		compatible = "oem,aboard";
  		interrupt-parent = <&tlmm>;
  		oem,aboard-gpio-0 = <&tlmm 58 0>;
- 		pinctrl-names = "oem_aboard_active","oem_aboard_sleep";
+ 		pinctrl-names = "oem_aboard_active","oem_aboard_sleep","oem_aboard_suspend";
  		pinctrl-0 = <&ab_id0_active>;
 		pinctrl-1 = <&ab_id0_sleep>;
+ 		pinctrl-2 = <&ab_id0_suspend>;
  	};
 
 	bootloader_log {
