@@ -567,14 +567,21 @@ struct a_board_version a_board_version_string_arry_gpio[]={
 
     {0,   "NOQET"},
     {1,   "QET"},
+    {2,   "QET_New"},
 };
 
 struct main_board_info main_board_info_check[]={
-	/*  prj      hw       rf        version*/
-	{   11     ,  11     , NONDEFINE      ,"20801 T0"},
-	{   11     ,  12     , NONDEFINE      ,"20801 EVT1"},
-	/* Add the prj, hw, rf as per the project stage */
-	{NONDEFINE,NONDEFINE,NONDEFINE,"Unknown"}
+    /*  prj      hw       rf        version*/
+    {   11     ,  11     , 13      ,"20801 T0"},
+    {   11     ,  11     , 14      ,"20801 T0"},
+    {   11     ,  12     , 13      ,"20801 EVT1"},
+    {   11     ,  12     , 14      ,"20801 EVT1"},
+    {   11     ,  13     , 13      ,"20801 DVT"},
+    {   11     ,  13     , 14      ,"20801 DVT"},
+    {   11     ,  14     , 13      ,"20801 PVT"},
+    {   11     ,  14     , 14      ,"20801 PVT"},
+    /* Add the prj, hw, rf as per the project stage */
+    {NONDEFINE,NONDEFINE,NONDEFINE,"Unknown"}
 };
 
 uint32 get_hw_version(void)
@@ -585,7 +592,7 @@ uint32 get_hw_version(void)
 
     if (IS_ERR_OR_NULL(project_info_desc)) {
         pr_err("%s: get project_info failure\n", __func__);
-	project_info_desc = NULL;
+        project_info_desc = NULL;
     }
     else {
         pr_err("%s: hw version: %d\n", __func__,
@@ -664,8 +671,8 @@ int __init init_project_info(void)
 
     get_ddr_manufacture_name();
 
-	/* approximate as ceiling of total pages */
-	ddr_size = (totalram_pages + (1 << 18) - 1) >> 18;
+    /* approximate as ceiling of total pages */
+    ddr_size = (totalram_pages + (1 << 18) - 1) >> 18;
 
     snprintf(ddr_version, sizeof(ddr_version), "size_%dG_r_%d_c_%d",
         ddr_size, project_info_desc->ddr_row,
@@ -694,6 +701,7 @@ struct aboard_data {
     struct pinctrl                      *pinctrl;
     struct pinctrl_state                *pinctrl_state_active;
     struct pinctrl_state                *pinctrl_state_sleep;
+    struct pinctrl_state                *pinctrl_state_suspend;
     struct device *dev;
 };
 static struct aboard_data *data;
@@ -725,16 +733,32 @@ static int op_aboard_read_gpio(void)
 {
     int gpio0 = 0;
     int gpio1 = 0;
+    int rc = 0;
+
     if ( data == NULL || IS_ERR_OR_NULL(project_info_desc))
     {
         return 0 ;
     }
-    if(data->support_aboard_gpio_0 == 1)
-        gpio0 = gpio_get_value(data->aboard_gpio_0);
-    if(data->support_aboard_gpio_1 == 1)
-        gpio1 = gpio_get_value(data->aboard_gpio_1);
 
-	a_board_val = gpio0;
+    rc = pinctrl_select_state(data->pinctrl,data->pinctrl_state_active);
+    if ( !rc) {
+        pr_err("%s: Failed to set active for aboardgpio\n", __func__);
+    }
+
+    if(data->support_aboard_gpio_0 == 1)
+        gpio_direction_input(data->aboard_gpio_0);
+
+    gpio0 = gpio_get_value(data->aboard_gpio_0);
+
+    rc = pinctrl_select_state(data->pinctrl,data->pinctrl_state_suspend);
+    if ( !rc) {
+        pr_err("%s: Failed to set suspend for aboardgpio\n", __func__);
+    }
+
+    gpio_direction_input(data->aboard_gpio_0);
+    gpio1 = gpio_get_value(data->aboard_gpio_0);
+
+    a_board_val = gpio0 + gpio1;
     snprintf(Aboard_version, sizeof(Aboard_version), "%d %s",
     a_board_val, a_board_version_string_arry_gpio[a_board_val].name);
 
@@ -770,7 +794,7 @@ static int oem_aboard_probe(struct platform_device *pdev)
     }else{
        data->support_aboard_gpio_1 = 1;
     }
-    
+
     data->pinctrl = devm_pinctrl_get((data->dev));
     if (IS_ERR_OR_NULL(data->pinctrl)) {
         rc = PTR_ERR(data->pinctrl);
@@ -786,9 +810,16 @@ static int oem_aboard_probe(struct platform_device *pdev)
         goto err_pinctrl_lookup;
     }
 
-    if (data->pinctrl) {
-        rc = pinctrl_select_state(data->pinctrl,data->pinctrl_state_active);
+    data->pinctrl_state_suspend = pinctrl_lookup_state(data->pinctrl, "oem_aboard_suspend");
+
+    if (IS_ERR_OR_NULL(data->pinctrl_state_suspend)) {
+        rc = PTR_ERR(data->pinctrl_state_suspend);
+        pr_err("%s pinctrl state suspend error!\n",__func__);
+        goto err_pinctrl_lookup;
     }
+
+    rc = pinctrl_select_state(data->pinctrl,data->pinctrl_state_active);
+
     if(data->support_aboard_gpio_0 == 1)
         gpio_direction_input(data->aboard_gpio_0);
     if(data->support_aboard_gpio_1 == 1)
@@ -803,7 +834,7 @@ static int oem_aboard_probe(struct platform_device *pdev)
 
     pr_err("%s: probe finish!\n", __func__);
     return 0;
-    
+
 err_pinctrl_lookup:
     devm_pinctrl_put(data->pinctrl);
 err_pinctrl_get:
