@@ -1248,6 +1248,10 @@ static const struct apsd_result *smblib_update_usb_type(struct smb_charger *chg)
 	if (chg->dash_on) {
 		chg->real_charger_type = POWER_SUPPLY_TYPE_DASH;
 		chg->usb_psy_desc.type = POWER_SUPPLY_TYPE_DASH;
+	} else if (chg->pd_active) {
+		/* if PD is active, APSD is disabled so won't have a valid result */
+		chg->usb_psy_desc.type = apsd_result->pst;
+		chg->real_charger_type = POWER_SUPPLY_TYPE_USB_PD;
 	} else if (chg->qc3p5_detected) {
 		chg->real_charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3P5;
 	} else {
@@ -5022,8 +5026,14 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 	 * Ignore repetitive notification while PD is active, which
 	 * is caused by hard reset.
 	 */
-	if (chg->pd_active && chg->pd_active == val->intval)
+	if (chg->pd_active && chg->pd_active == val->intval) {
+		op_usbpd_send_svdm(USBPD_SID, USBPD_SVDM_DISCOVER_IDENTITY,
+			SVDM_CMD_TYPE_INITIATOR, 0, NULL, 0);
+		cancel_delayed_work(&chg->pdo_select_check_work);
+		schedule_delayed_work(&chg->pdo_select_check_work,
+			msecs_to_jiffies(2000));
 		return 0;
+	}
 
 	chg->pd_active = val->intval;
 
@@ -5082,6 +5092,11 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 					rc);
 		}
 
+		/* @bsp, 2020/08/04, add to detect SVID */
+		op_usbpd_send_svdm(USBPD_SID, USBPD_SVDM_DISCOVER_IDENTITY,
+				SVDM_CMD_TYPE_INITIATOR, 0, NULL, 0);
+		pr_info("PPS type, Discover SVID!\n");
+
 		// Schedule PDO selction for 9V2A
 		schedule_delayed_work(&chg->pdo_select_check_work,
 				msecs_to_jiffies(2000));
@@ -5089,13 +5104,6 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 		/* @bsp, 2019/12/20 add pd skin thermal check */
 		schedule_delayed_work(&chg->pd_current_check_work,
 				msecs_to_jiffies(200));
-
-		/* @bsp, 2020/08/04, add to detect SVID */
-		if (chg->pd_active == POWER_SUPPLY_PD_PPS_ACTIVE) {
-			op_usbpd_send_svdm(USBPD_SID, USBPD_SVDM_DISCOVER_IDENTITY,
-				SVDM_CMD_TYPE_INITIATOR, 0, NULL, 0);
-			pr_info("PPS type, Discover SVID!\n");
-		}
 	} else {
 		vote(chg->usb_icl_votable, PD_VOTER, false, 0);
 		vote(chg->limited_irq_disable_votable, CHARGER_TYPE_VOTER,
@@ -6358,10 +6366,12 @@ static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 		apsd_result->bit, apsd_result->name, apsd_result->pst);
 	pr_info("apsd done,current_now=%d\n",
 		(get_prop_batt_current_now(chg) / 1000));
-	if (apsd_result->bit == DCP_CHARGER_BIT
-		|| apsd_result->bit == OCP_CHARGER_BIT) {
-		schedule_delayed_work(&chg->check_switch_dash_work,
+	if (!chg->fastchg_switch_disable) {
+		if (apsd_result->bit == DCP_CHARGER_BIT
+				|| apsd_result->bit == OCP_CHARGER_BIT) {
+			schedule_delayed_work(&chg->check_switch_dash_work,
 					msecs_to_jiffies(50));
+		}
 	} else {
 		if (!chg->usb_type_redet_done) {
 			if (!chg->boot_usb_present && chg->probe_done)
@@ -7753,10 +7763,13 @@ static void pps_usbpd_connect_cb(struct usbpd_svid_handler *hdlr,
 	struct smb_charger *chg = g_chg;
 
 	chg->swarp_online = 1;
-	//if (!chg->fastchg_switch_disable && !chg->dash_present) {
-	if (!chg->dash_present) {
-		cancel_delayed_work(&chg->check_switch_dash_work);
-		schedule_delayed_work(&chg->check_switch_dash_work, 0);
+	op_set_fast_chg_allow(chg, false);
+
+	if (chg->chg_enabled) {
+		if (!chg->fastchg_switch_disable && !chg->dash_present) {
+			cancel_delayed_work(&chg->check_switch_dash_work);
+			schedule_delayed_work(&chg->check_switch_dash_work, msecs_to_jiffies(500));
+		}
 	}
 	pr_info("SWARP adapter connected!\n");
 }
@@ -8024,6 +8037,7 @@ static void op_handle_usb_removal(struct smb_charger *chg)
 
 	chg->chg_ovp = false;
 	chg->dash_on = false;
+	chg->fastchg_switch_disable = false;
 	chg->chg_done = false;
 	chg->time_out = false;
 	chg->recharge_status = false;
@@ -8038,6 +8052,7 @@ static void op_handle_usb_removal(struct smb_charger *chg)
 	chg->non_stand_chg_count = 0;
 	chg->redet_count = 0;
 	chg->dump_count = 0;
+	chg->swarp_online = 0;
 	chg->op_apsd_done = 0;
 	chg->ck_dash_count = 0;
 	chg->re_trigr_dash_done = 0;
@@ -8515,17 +8530,25 @@ static void retrigger_dash_work(struct work_struct *work)
 		chg->ck_dash_count = 0;
 		return;
 	}
-	if (chg->ck_dash_count >= DASH_CHECK_COUNT) {
+	if (chg->ck_dash_count == DASH_CHECK_COUNT) {
 		pr_info("retrger dash\n");
 		chg->re_trigr_dash_done = true;
 		set_usb_switch(chg, false);
 		set_usb_switch(chg, true);
+	} else if (chg->ck_dash_count ==  2 * DASH_CHECK_COUNT) {
+		set_usb_switch(chg, false);
+	} else if (chg->ck_dash_count > 2 * DASH_CHECK_COUNT) {
 		chg->ck_dash_count = 0;
-	} else {
-		chg->ck_dash_count++;
-		schedule_delayed_work(&chg->rechk_sw_dsh_work,
-				msecs_to_jiffies(TIME_200MS));
+		chg->fastchg_switch_disable = true;
+		cancel_delayed_work(&chg->pdo_select_check_work);
+		schedule_delayed_work(&chg->pdo_select_check_work,
+			msecs_to_jiffies(2000));
+		return;
 	}
+
+	chg->ck_dash_count++;
+	schedule_delayed_work(&chg->rechk_sw_dsh_work,
+			msecs_to_jiffies(TIME_200MS));
 }
 
 static void op_check_high_vbat_chg_work(struct work_struct *work)
@@ -8679,6 +8702,13 @@ static void op_check_allow_switch_dash_work(struct work_struct *work)
 		return;
 	if (chg->usb_enum_status)
 		return;
+	if (chg->fastchg_switch_disable)
+		return;
+
+	if (chg->pd_active) {
+		switch_fast_chg(chg);
+		return;
+	}
 
 	apsd_result = smblib_get_apsd_result(chg);
 	if (((apsd_result->bit != SDP_CHARGER_BIT
@@ -9333,6 +9363,7 @@ void op_charge_info_init(struct smb_charger *chg)
 	chg->time_out = false;
 	chg->battery_status = BATT_STATUS_GOOD;
 	chg->disable_normal_chg_for_dash = false;
+	chg->fastchg_switch_disable = false;
 	chg->usb_enum_status = false;
 	chg->non_std_chg_present = false;
 	chg->is_audio_adapter = false;
