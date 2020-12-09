@@ -174,7 +174,7 @@ bool is_dynamic_tpd_task(struct task_struct *tsk)
 
 	gid = leader->dtpdg;
 	/* not dynamic tpd task will return */
-	if (gid < TPD_GROUP_MEDIAPROVIDER || gid > TPD_GROUP_MAX)
+	if (gid < TPD_GROUP_MEDIAPROVIDER || gid >= TPD_GROUP_MAX)
 		return ret;
 
 	group = &mgp[gid];
