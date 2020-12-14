@@ -10,13 +10,13 @@
 
 
 / {
-	model = "Qualcomm Technologies, Inc. Lito MTP pvt V2.1 20801 54";
+	model = "Qualcomm Technologies, Inc. Lito MTP pvt V2.1 20801";
 	compatible = "qcom,lito-mtp", "qcom,lito", "qcom,mtp";
 	qcom,board-id = <8 0>;
 	/*we can add project id to this array,uefi can auto read it,if new project,we add to this array */
 	oem,project-id = <20801>;
 	/*we can add hw id to this array,uefi can auto read it,if new hw,we add to this array  */
-	oem,hw-id = <54>;
+	oem,hw-id = <54 15 21 22 23 24 25>;
 };
 
 &ufsphy_mem {
