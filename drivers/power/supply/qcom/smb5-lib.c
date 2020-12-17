@@ -5071,6 +5071,9 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 
 	chg->pd_active = val->intval;
 
+	if (chg->swarp_online && chg->switch_on_fastchg)
+		return 0;
+
 	smblib_apsd_enable(chg, !chg->pd_active);
 
 	update_sw_icl_max(chg, apsd->pst);
