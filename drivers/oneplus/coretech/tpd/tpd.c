@@ -663,7 +663,7 @@ static int tpd_process_trigger_store(const char *buf, const struct kernel_param 
 					/* need re-tag, add thread name into miss_list */
 					strncpy(group->miss_list[group->cur_idx], threads[i], TASK_COMM_LEN);
 					group->miss_list_tgid[group->cur_idx] = tgid;
-					group->cur_idx = (++group->cur_idx) % MAX_MISS_LIST;
+					group->cur_idx = (group->cur_idx+1) % MAX_MISS_LIST;
 					group->not_yet++;
 				} else {
 					/* dynmic tpd disabled when miss_list still have thread need to tag, we clear the miss list */
