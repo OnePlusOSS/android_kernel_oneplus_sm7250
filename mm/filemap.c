@@ -40,6 +40,10 @@
 #include <linux/psi.h>
 #include "internal.h"
 
+#ifdef CONFIG_CGROUP_IOLIMIT
+#include <linux/iolimit_cgroup.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/filemap.h>
 
@@ -947,7 +951,10 @@ int add_to_page_cache_lru(struct page *page, struct address_space *mapping,
 		WARN_ON_ONCE(PageActive(page));
 		if (!(gfp_mask & __GFP_WRITE) && shadow)
 			workingset_refault(page, shadow);
-		lru_cache_add(page);
+
+		/* bin.zhong@ASTI, 2019/10/11, add for CONFIG_SMART_BOOST */
+		if (!smb_uid_lru_add(page))
+			lru_cache_add(page);
 	}
 	return ret;
 }
@@ -1119,7 +1126,7 @@ enum behavior {
 			 */
 };
 
-static inline __sched int wait_on_page_bit_common(wait_queue_head_t *q,
+static inline int wait_on_page_bit_common(wait_queue_head_t *q,
 	struct page *page, int bit_nr, int state, enum behavior behavior)
 {
 	struct wait_page_queue wait_page;
@@ -1209,14 +1216,14 @@ static inline __sched int wait_on_page_bit_common(wait_queue_head_t *q,
 	return ret;
 }
 
-void __sched wait_on_page_bit(struct page *page, int bit_nr)
+void wait_on_page_bit(struct page *page, int bit_nr)
 {
 	wait_queue_head_t *q = page_waitqueue(page);
 	wait_on_page_bit_common(q, page, bit_nr, TASK_UNINTERRUPTIBLE, SHARED);
 }
 EXPORT_SYMBOL(wait_on_page_bit);
 
-int __sched wait_on_page_bit_killable(struct page *page, int bit_nr)
+int wait_on_page_bit_killable(struct page *page, int bit_nr)
 {
 	wait_queue_head_t *q = page_waitqueue(page);
 	return wait_on_page_bit_common(q, page, bit_nr, TASK_KILLABLE, SHARED);
@@ -1367,7 +1374,7 @@ EXPORT_SYMBOL_GPL(page_endio);
  * __lock_page - get a lock on the page, assuming we need to sleep to get it
  * @__page: the page to lock
  */
-void __sched __lock_page(struct page *__page)
+void __lock_page(struct page *__page)
 {
 	struct page *page = compound_head(__page);
 	wait_queue_head_t *q = page_waitqueue(page);
@@ -1376,7 +1383,7 @@ void __sched __lock_page(struct page *__page)
 }
 EXPORT_SYMBOL(__lock_page);
 
-int __sched __lock_page_killable(struct page *__page)
+int __lock_page_killable(struct page *__page)
 {
 	struct page *page = compound_head(__page);
 	wait_queue_head_t *q = page_waitqueue(page);
@@ -1396,7 +1403,7 @@ EXPORT_SYMBOL_GPL(__lock_page_killable);
  * If neither ALLOW_RETRY nor KILLABLE are set, will always return 1
  * with the page locked and the mmap_sem unperturbed.
  */
-int __sched __lock_page_or_retry(struct page *page, struct mm_struct *mm,
+int __lock_page_or_retry(struct page *page, struct mm_struct *mm,
 			 unsigned int flags)
 {
 	if (flags & FAULT_FLAG_ALLOW_RETRY) {
@@ -2192,6 +2199,12 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 		unsigned long nr, ret;
 
 		cond_resched();
+
+#ifdef CONFIG_CGROUP_IOLIMIT
+		if (iolimit_enable)
+			io_read_bandwidth_control(PAGE_SIZE);
+#endif
+
 find_page:
 		if (fatal_signal_pending(current)) {
 			error = -EINTR;
@@ -3284,6 +3297,11 @@ ssize_t generic_perform_write(struct file *file,
 		unsigned long bytes;	/* Bytes to write to page */
 		size_t copied;		/* Bytes copied from user */
 		void *fsdata;
+
+#ifdef CONFIG_CGROUP_IOLIMIT
+		if (iolimit_enable)
+			io_write_bandwidth_control(PAGE_SIZE);
+#endif
 
 		offset = (pos & (PAGE_SIZE - 1));
 		bytes = min_t(unsigned long, PAGE_SIZE - offset,

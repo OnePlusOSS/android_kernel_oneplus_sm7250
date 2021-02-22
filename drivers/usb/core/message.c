@@ -514,13 +514,15 @@ EXPORT_SYMBOL_GPL(usb_sg_init);
  */
 void usb_sg_wait(struct usb_sg_request *io)
 {
-	int i, retval;
+	int i;
 	int entries = io->entries;
 
 	/* queue the urbs.  */
 	spin_lock_irq(&io->lock);
 	i = 0;
 	while (i < entries && !io->status) {
+		int retval;
+
 		io->urbs[i]->dev = io->dev;
 		spin_unlock_irq(&io->lock);
 
@@ -566,13 +568,7 @@ void usb_sg_wait(struct usb_sg_request *io)
 	 * So could the submit loop above ... but it's easier to
 	 * solve neither problem than to solve both!
 	 */
-	retval = wait_for_completion_timeout(&io->complete,
-						msecs_to_jiffies(5000));
-	if (retval == 0) {
-		dev_err(&io->dev->dev, "%s, timed out while waiting for io_complete\n",
-				__func__);
-		usb_sg_cancel(io);
-	}
+	wait_for_completion(&io->complete);
 
 	sg_clean(io);
 }
@@ -1147,11 +1143,11 @@ void usb_disable_endpoint(struct usb_device *dev, unsigned int epaddr,
 
 	if (usb_endpoint_out(epaddr)) {
 		ep = dev->ep_out[epnum];
-		if (reset_hardware && epnum != 0)
+		if (reset_hardware)
 			dev->ep_out[epnum] = NULL;
 	} else {
 		ep = dev->ep_in[epnum];
-		if (reset_hardware && epnum != 0)
+		if (reset_hardware)
 			dev->ep_in[epnum] = NULL;
 	}
 	if (ep) {

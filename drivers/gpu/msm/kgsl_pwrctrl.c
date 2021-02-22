@@ -17,6 +17,10 @@
 #include "kgsl_trace.h"
 #include "kgsl_trace_power.h"
 
+#ifdef CONFIG_HOUSTON
+#include <oneplus/houston/houston_helper.h>
+#endif
+
 #define KGSL_PWRFLAGS_POWER_ON 0
 #define KGSL_PWRFLAGS_CLK_ON   1
 #define KGSL_PWRFLAGS_AXI_ON   2
@@ -669,11 +673,11 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 	if (pwr->gpu_bimc_int_clk) {
 		if (pwr->active_pwrlevel == 0 &&
 				!pwr->gpu_bimc_interface_enabled) {
-			_bimc_clk_prepare_enable(device,
-					pwr->gpu_bimc_int_clk,
-					"bimc_gpu_clk");
 			kgsl_pwrctrl_clk_set_rate(pwr->gpu_bimc_int_clk,
 					pwr->gpu_bimc_int_clk_freq,
+					"bimc_gpu_clk");
+			_bimc_clk_prepare_enable(device,
+					pwr->gpu_bimc_int_clk,
 					"bimc_gpu_clk");
 			pwr->gpu_bimc_interface_enabled = true;
 		} else if (pwr->previous_pwrlevel == 0
@@ -2266,6 +2270,13 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	if (pwr->grp_clks[0] == NULL)
 		pwr->grp_clks[0] = pwr->grp_clks[1];
 
+	/* Getting gfx-bimc-interface-clk frequency */
+	if (!of_property_read_u32(pdev->dev.of_node,
+			"qcom,gpu-bimc-interface-clk-freq",
+			&pwr->gpu_bimc_int_clk_freq))
+		pwr->gpu_bimc_int_clk = devm_clk_get(&pdev->dev,
+					"bimc_gpu_clk");
+
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,no-nap"))
 		device->pwrctrl.ctrl_flags |= BIT(KGSL_PWRFLAGS_NAP_OFF);
 
@@ -2429,6 +2440,10 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	/* temperature sensor name */
 	of_property_read_string(pdev->dev.of_node, "qcom,tzone-name",
 		&pwr->tzone_name);
+
+#ifdef CONFIG_HOUSTON
+	ht_register_kgsl_pwrctrl(pwr);
+#endif
 
 	return result;
 

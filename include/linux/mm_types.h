@@ -14,7 +14,6 @@
 #include <linux/uprobes.h>
 #include <linux/page-flags-layout.h>
 #include <linux/workqueue.h>
-#include <linux/android_kabi.h>
 
 #include <asm/mmu.h>
 
@@ -287,6 +286,10 @@ struct vm_area_struct {
 	 */
 	unsigned long rb_subtree_gap;
 
+#ifdef CONFIG_VM_FRAGMENT_MONITOR
+	unsigned long rb_glfragment_gap;
+#endif
+
 	/* Second cache line starts here. */
 
 	struct mm_struct *vm_mm;	/* The address space we belong to. */
@@ -340,11 +343,6 @@ struct vm_area_struct {
 	seqcount_t vm_sequence;		/* Speculative page fault field */
 	atomic_t vm_ref_count;		/* see vma_get(), vma_put() */
 #endif
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 } __randomize_layout;
 
 struct core_thread {
@@ -516,6 +514,9 @@ struct mm_struct {
 		/* HMM needs to track a few things per mm */
 		struct hmm *hmm;
 #endif
+		unsigned int zygoteheap_in_MB;
+		int va_feature;
+		unsigned long va_feature_rnd;
 	} __randomize_layout;
 
 	/*

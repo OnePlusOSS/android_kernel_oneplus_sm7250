@@ -36,8 +36,18 @@
 #include "qg-soc.h"
 #include "qg-battery-profile.h"
 #include "qg-defs.h"
+/* @bsp, 2019/07/05 Battery & Charging porting */
+#include <linux/oem/power/oem_external_fg.h>
 
 static int qg_debug_mask;
+/* @bsp, 2019/07/05 Battery & Charging porting */
+static void oem_update_cc_cv_setpoint(struct qpnp_qg *chip,
+	int cv_float_point);
+static void oneplus_set_allow_read_iic(struct qpnp_qg *chip,
+	bool status);
+static void oneplus_set_lcd_off_status(struct qpnp_qg *chip,
+	bool status);
+static struct external_battery_gauge *external_fg;
 
 static int qg_esr_mod_count = 30;
 static ssize_t esr_mod_count_show(struct device *dev, struct device_attribute
@@ -59,6 +69,27 @@ static ssize_t esr_mod_count_store(struct device *dev,
 	return count;
 }
 static DEVICE_ATTR_RW(esr_mod_count);
+
+/* @bsp, 2019/07/05 Battery & Charging porting */
+void external_battery_gauge_register(
+				struct external_battery_gauge *batt_gauge)
+{
+	if (external_fg) {
+		external_fg = batt_gauge;
+		pr_err("multiple battery gauge called\n");
+	} else
+		external_fg = batt_gauge;
+}
+EXPORT_SYMBOL(external_battery_gauge_register);
+
+void external_battery_gauge_unregister(
+				struct external_battery_gauge *batt_gauge)
+{
+	external_fg = NULL;
+}
+EXPORT_SYMBOL(external_battery_gauge_unregister);
+/* @bsp, 2019/07/05 Battery & Charging porting */
+#define OP_SW_DEFAULT_ID 200000
 
 static int qg_esr_count = 3;
 static ssize_t esr_count_show(struct device *dev, struct device_attribute
@@ -256,15 +287,6 @@ static void qg_notify_charger(struct qpnp_qg *chip)
 
 	if (!chip->profile_loaded)
 		return;
-
-	prop.intval = chip->bp.float_volt_uv;
-	rc = power_supply_set_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
-	if (rc < 0) {
-		pr_err("Failed to set voltage_max property on batt_psy, rc=%d\n",
-			rc);
-		return;
-	}
 
 	prop.intval = chip->bp.fastchg_curr_ma * 1000;
 	rc = power_supply_set_property(chip->batt_psy,
@@ -1735,8 +1757,12 @@ static int qg_store_cycle_count(void *data, u16 *buf, int id, int length)
 #define DEFAULT_BATT_TYPE	"Unknown Battery"
 #define MISSING_BATT_TYPE	"Missing Battery"
 #define DEBUG_BATT_TYPE		"Debug Board"
+#define OP_AVACI_BATT_TYPE		"OP_4115mAh"
+
 static const char *qg_get_battery_type(struct qpnp_qg *chip)
 {
+	return OP_AVACI_BATT_TYPE;
+
 	if (chip->battery_missing)
 		return MISSING_BATT_TYPE;
 
@@ -2093,6 +2119,17 @@ static int qg_psy_set_property(struct power_supply *psy,
 	int rc = 0;
 
 	switch (psp) {
+/* @bsp, 2019/07/05 Battery & Charging porting */
+	case POWER_SUPPLY_PROP_CC_TO_CV_POINT:
+		oem_update_cc_cv_setpoint(chip, pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_SET_ALLOW_READ_EXTERN_FG_IIC:
+		oneplus_set_allow_read_iic(chip, pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_UPDATE_LCD_IS_OFF:
+		oneplus_set_lcd_off_status(chip, pval->intval);
+		break;
+
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		if (chip->dt.cl_disable) {
 			pr_warn("Capacity learning disabled!\n");
@@ -2137,6 +2174,7 @@ static int qg_psy_set_property(struct power_supply *psy,
 	return 0;
 }
 
+#define  DEFALUT_BATT_TEMP 250
 static int qg_psy_get_property(struct power_supply *psy,
 			       enum power_supply_property psp,
 			       union power_supply_propval *pval)
@@ -2149,7 +2187,15 @@ static int qg_psy_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
-		rc = qg_get_battery_capacity(chip, &pval->intval);
+/* @bsp, 2019/07/05 Battery & Charging porting */
+		if (!get_extern_fg_regist_done())
+			pval->intval = get_prop_pre_shutdown_soc();
+		else if (chip->use_external_fg && external_fg
+					&& external_fg->get_battery_soc)
+			pval->intval = external_fg->get_battery_soc();
+		else
+			pval->intval = 50;
+
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY_RAW:
 		pval->intval = chip->sys_soc;
@@ -2158,23 +2204,63 @@ static int qg_psy_get_property(struct power_supply *psy,
 		rc = qg_get_battery_capacity_real(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		rc = qg_get_battery_voltage(chip, &pval->intval);
+/* @bsp, 2019/07/05 Battery & Charging porting */
+		if (chip->use_external_fg && external_fg
+				&& external_fg->get_battery_mvolts)
+			pval->intval = external_fg->get_battery_mvolts();
+		else
+			pval->intval = 4000000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		rc = qg_get_battery_current(chip, &pval->intval);
+/* @bsp, 2019/07/05 Battery & Charging porting */
+		if (chip->use_external_fg && external_fg
+				&& external_fg->get_average_current)
+			pval->intval = external_fg->get_average_current();
+		else
+			pval->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
 		rc = qg_sdam_read(SDAM_OCV_UV, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		rc = qg_get_battery_temp(chip, &pval->intval);
+		if (!get_extern_fg_regist_done()
+				&& get_extern_bq_present())
+			pval->intval = DEFALUT_BATT_TEMP;
+		else if ((chip->use_external_fg && external_fg)
+			&& external_fg->get_battery_temperature) {
+			pval->intval = external_fg->get_battery_temperature();
+		} else
+			pval->intval = 250;
 		break;
+/* @bsp, 2019/07/05 Battery & Charging porting */
+	case POWER_SUPPLY_PROP_FG_CAPACITY:
+		rc = qg_get_battery_capacity(chip, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_FG_VOLTAGE_NOW:
+		if (chip->battery_missing)
+			pval->intval = 3700000;
+		else
+			rc = qg_get_battery_voltage(chip, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_FG_CURRENT_NOW:
+			rc = qg_get_battery_current(chip, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_BQ_SOC:
+		if (chip->use_external_fg && external_fg
+				&& external_fg->get_batt_bq_soc)
+			pval->intval = external_fg->get_batt_bq_soc();
+		else
+			pval->intval = 50;
+		break;
+
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		pval->intval = chip->batt_id_ohm;
 		break;
 	case POWER_SUPPLY_PROP_DEBUG_BATTERY:
 		pval->intval = is_debug_batt_id(chip);
 		break;
+	case POWER_SUPPLY_PROP_BATTERY_HEALTH:
+		pval->intval =  -EINVAL;
 	case POWER_SUPPLY_PROP_RESISTANCE:
 		rc = qg_sdam_read(SDAM_RBAT_MOHM, &pval->intval);
 		if (!rc)
@@ -2208,17 +2294,39 @@ static int qg_psy_get_property(struct power_supply *psy,
 		rc = qg_get_charge_counter(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		if (!chip->dt.cl_disable && chip->dt.cl_feedback_on)
+		if (!get_extern_fg_regist_done() && get_extern_bq_present())
+			pval->intval = -EINVAL;
+		else if (chip->use_external_fg && external_fg
+				&& external_fg->get_batt_full_chg_capacity)
+			pval->intval =
+				external_fg->get_batt_full_chg_capacity() * 1000;
+		else {
 			rc = qg_get_learned_capacity(chip, &temp);
+			if (!rc)
+				pval->intval = (int)temp;
+		}
+		break;
+	case POWER_SUPPLY_PROP_REMAINING_CAPACITY:
+		if (!get_extern_fg_regist_done() && get_extern_bq_present())
+			pval->intval = DEFALUT_BATT_TEMP;
+		else if (chip->use_external_fg && external_fg
+				&& external_fg->get_batt_remaining_capacity)
+			pval->intval =
+				external_fg->get_batt_remaining_capacity();
 		else
-			rc = qg_get_nominal_capacity((int *)&temp, 250, true);
-		if (!rc)
-			pval->intval = (int)temp;
+			pval->intval = -EINVAL;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		rc = qg_get_nominal_capacity((int *)&temp, 250, true);
-		if (!rc)
-			pval->intval = (int)temp;
+		if (!get_extern_fg_regist_done() && get_extern_bq_present())
+			pval->intval = -EINVAL;
+		else if (chip->use_external_fg && external_fg && external_fg->get_batt_full_chg_capacity) {
+			temp = external_fg->get_batt_full_chg_capacity();
+			pval->intval = 1000 * temp;
+		} else {
+			rc = qg_get_nominal_capacity((int *)&temp, 250, true);
+			if (!rc)
+				pval->intval = -EINVAL;
+		}
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
 		rc = get_cycle_counts(chip->counter, &pval->strval);
@@ -2232,7 +2340,15 @@ static int qg_psy_get_property(struct power_supply *psy,
 		rc = ttf_get_time_to_full(chip->ttf, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
-		rc = ttf_get_time_to_full(chip->ttf, &pval->intval);
+		if (chip->iskebab) {
+			if (chip->use_external_fg && external_fg
+			&& external_fg->get_time_to_full)
+				rc = external_fg->get_time_to_full();
+			if (rc >= 0)
+				pval->intval = rc;
+		} else
+			rc = ttf_get_time_to_full(chip->ttf, &pval->intval);
+		pval->intval = pval->intval > 0 ? pval->intval : 1;
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
 		rc = ttf_get_time_to_empty(chip->ttf, &pval->intval);
@@ -2290,6 +2406,9 @@ static int qg_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SOH:
 	case POWER_SUPPLY_PROP_FG_RESET:
 	case POWER_SUPPLY_PROP_BATT_AGE_LEVEL:
+/* @bsp, 2019/07/05 Battery & Charging porting */
+	case POWER_SUPPLY_PROP_SET_ALLOW_READ_EXTERN_FG_IIC:
+
 		return 1;
 	default:
 		break;
@@ -2336,6 +2455,11 @@ static enum power_supply_property qg_psy_props[] = {
 	POWER_SUPPLY_PROP_SCALE_MODE_EN,
 	POWER_SUPPLY_PROP_BATT_AGE_LEVEL,
 	POWER_SUPPLY_PROP_FG_TYPE,
+/* @bsp, 2019/07/05 Battery & Charging porting */
+	POWER_SUPPLY_PROP_SET_ALLOW_READ_EXTERN_FG_IIC,
+	POWER_SUPPLY_PROP_BQ_SOC,
+	POWER_SUPPLY_PROP_BATTERY_HEALTH,
+	POWER_SUPPLY_PROP_REMAINING_CAPACITY,
 };
 
 static const struct power_supply_desc qg_psy_desc = {
@@ -4259,7 +4383,6 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 		chip->dt.vbatt_empty_cold_mv = DEFAULT_VBATT_EMPTY_COLD_MV;
 	else
 		chip->dt.vbatt_empty_cold_mv = temp;
-
 	rc = of_property_read_u32(node, "qcom,cold-temp-threshold", &temp);
 	if (rc < 0)
 		chip->dt.cold_temp_threshold = DEFAULT_COLD_TEMP_THRESHOLD;
@@ -4409,6 +4532,8 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 	}
 
 	chip->dt.bass_enable = of_property_read_bool(node, "qcom,bass-enable");
+	chip->iskebab = of_property_read_bool(node, "oem,iskebab");
+	pr_info("iskebab=%d\n", chip->iskebab);
 
 	chip->dt.multi_profile_load = of_property_read_bool(node,
 					"qcom,multi-profile-load");
@@ -4665,6 +4790,33 @@ static const struct dev_pm_ops qpnp_qg_pm_ops = {
 	.resume		= qpnp_qg_resume,
 };
 
+/* @bsp, 2019/07/05 Battery & Charging porting */
+static void oem_update_cc_cv_setpoint(
+				struct qpnp_qg *chip, int cv_float_point)
+{
+	/* TODO: write CC_CV_SETPOINT_REG */
+}
+
+static void oneplus_set_allow_read_iic(struct qpnp_qg *chip,
+				bool status)
+{
+	if (chip->use_external_fg && external_fg
+			&& external_fg->set_allow_reading)
+		external_fg->set_allow_reading(status);
+	else
+		pr_info("set allow read extern fg iic fail\n");
+}
+
+static void oneplus_set_lcd_off_status(struct qpnp_qg *chip,
+				bool status)
+{
+	if (chip->use_external_fg && external_fg
+			&& external_fg->set_lcd_off_status)
+		external_fg->set_lcd_off_status(status);
+	else
+		pr_info("set lcd off status fail\n");
+}
+
 static int qpnp_qg_probe(struct platform_device *pdev)
 {
 	int rc = 0, soc = 0, nom_cap_uah;
@@ -4679,6 +4831,7 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 		pr_err("Parent regmap is unavailable\n");
 		return -ENXIO;
 	}
+	chip->use_external_fg = true;
 
 	/* ADC for BID & THERM */
 	chip->batt_id_chan = iio_channel_get(&pdev->dev, "batt-id");

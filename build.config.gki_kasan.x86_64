@@ -1,4 +1,0 @@
-. ${ROOT_DIR}/common/build.config.common
-. ${ROOT_DIR}/common/build.config.x86_64
-. ${ROOT_DIR}/common/build.config.gki_kasan
-

@@ -39,6 +39,9 @@
 #include <linux/bitops.h>
 #include <linux/init_task.h>
 #include <linux/uaccess.h>
+#ifdef CONFIG_FSC
+#include <linux/oem/fsc.h>
+#endif
 #include <linux/build_bug.h>
 
 #include "internal.h"
@@ -465,7 +468,7 @@ int inode_permission2(struct vfsmount *mnt, struct inode *inode, int mask)
 	retval = security_inode_permission(inode, mask);
 	return retval;
 }
-EXPORT_SYMBOL_GPL(inode_permission2);
+EXPORT_SYMBOL(inode_permission2);
 
 int inode_permission(struct inode *inode, int mask)
 {
@@ -2433,18 +2436,44 @@ static int filename_lookup(int dfd, struct filename *name, unsigned flags,
 {
 	int retval;
 	struct nameidata nd;
+#ifdef CONFIG_FSC
+	unsigned int hidx = 0;
+	size_t len = 0;
+	bool is_fsc_path_candidate = false;
+#endif
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 	if (unlikely(root)) {
 		nd.root = *root;
 		flags |= LOOKUP_ROOT;
 	}
+#ifdef CONFIG_FSC
+	is_fsc_path_candidate = (fsc_enable && fsc_allow_list_cur &&
+					fsc_path_check(name, &len));
+	if (is_fsc_path_candidate && fsc_absence_check(name->name, len)) {
+		putname(name);
+		return -ENOENT;
+	}
+#endif
+
 	set_nameidata(&nd, dfd, name);
 	retval = path_lookupat(&nd, flags | LOOKUP_RCU, path);
 	if (unlikely(retval == -ECHILD))
 		retval = path_lookupat(&nd, flags, path);
 	if (unlikely(retval == -ESTALE))
 		retval = path_lookupat(&nd, flags | LOOKUP_REVAL, path);
+
+#ifdef CONFIG_FSC
+	if (is_fsc_path_candidate) {
+		hidx = fsc_get_hidx(name->name, len);
+		fsc_spin_lock(hidx);
+		if (retval == -ENOENT)
+			fsc_insert_absence_path_locked(name->name, len, hidx);
+		else
+			fsc_delete_absence_path_locked(name->name, len, hidx);
+		fsc_spin_unlock(hidx);
+	}
+#endif
 
 	if (likely(!retval))
 		audit_inode(name, path->dentry, flags & LOOKUP_PARENT);
@@ -2637,7 +2666,7 @@ struct dentry *lookup_one_len2(const char *name, struct vfsmount *mnt, struct de
 	dentry = lookup_dcache(&this, base, 0);
 	return dentry ? dentry : __lookup_slow(&this, base, 0);
 }
-EXPORT_SYMBOL_GPL(lookup_one_len2);
+EXPORT_SYMBOL(lookup_one_len2);
 
 struct dentry *lookup_one_len(const char *name, struct dentry *base, int len)
 {
@@ -3015,7 +3044,7 @@ int vfs_create2(struct vfsmount *mnt, struct inode *dir, struct dentry *dentry,
 		fsnotify_create(dir, dentry);
 	return error;
 }
-EXPORT_SYMBOL_GPL(vfs_create2);
+EXPORT_SYMBOL(vfs_create2);
 
 int vfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 		bool want_excl)
@@ -3043,7 +3072,7 @@ int vfs_mkobj2(struct vfsmount *mnt, struct dentry *dentry, umode_t mode,
 		fsnotify_create(dir, dentry);
 	return error;
 }
-EXPORT_SYMBOL_GPL(vfs_mkobj2);
+EXPORT_SYMBOL(vfs_mkobj2);
 
 
 int vfs_mkobj(struct dentry *dentry, umode_t mode,
@@ -3801,6 +3830,10 @@ EXPORT_SYMBOL(kern_path_create);
 
 void done_path_create(struct path *path, struct dentry *dentry)
 {
+#ifdef CONFIG_FSC
+	if (fsc_enable && fsc_allow_list_cur)
+		fsc_delete_absence_path_dentry(path, dentry);
+#endif
 	dput(dentry);
 	inode_unlock(path->dentry->d_inode);
 	mnt_drop_write(path->mnt);
@@ -3841,7 +3874,7 @@ int vfs_mknod2(struct vfsmount *mnt, struct inode *dir, struct dentry *dentry, u
 		fsnotify_create(dir, dentry);
 	return error;
 }
-EXPORT_SYMBOL_GPL(vfs_mknod2);
+EXPORT_SYMBOL(vfs_mknod2);
 
 int vfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode, dev_t dev)
 {
@@ -3945,7 +3978,7 @@ int vfs_mkdir2(struct vfsmount *mnt, struct inode *dir, struct dentry *dentry, u
 		fsnotify_mkdir(dir, dentry);
 	return error;
 }
-EXPORT_SYMBOL_GPL(vfs_mkdir2);
+EXPORT_SYMBOL(vfs_mkdir2);
 
 int vfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 {
@@ -4025,7 +4058,7 @@ out:
 		d_delete(dentry);
 	return error;
 }
-EXPORT_SYMBOL_GPL(vfs_rmdir2);
+EXPORT_SYMBOL(vfs_rmdir2);
 
 int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
@@ -4153,7 +4186,7 @@ out:
 
 	return error;
 }
-EXPORT_SYMBOL_GPL(vfs_unlink2);
+EXPORT_SYMBOL(vfs_unlink2);
 
 int vfs_unlink(struct inode *dir, struct dentry *dentry, struct inode **delegated_inode)
 {
@@ -4273,7 +4306,7 @@ int vfs_symlink2(struct vfsmount *mnt, struct inode *dir, struct dentry *dentry,
 		fsnotify_create(dir, dentry);
 	return error;
 }
-EXPORT_SYMBOL_GPL(vfs_symlink2);
+EXPORT_SYMBOL(vfs_symlink2);
 
 int vfs_symlink(struct inode *dir, struct dentry *dentry, const char *oldname)
 {
@@ -4401,7 +4434,7 @@ int vfs_link2(struct vfsmount *mnt, struct dentry *old_dentry, struct inode *dir
 		fsnotify_link(dir, inode, new_dentry);
 	return error;
 }
-EXPORT_SYMBOL_GPL(vfs_link2);
+EXPORT_SYMBOL(vfs_link2);
 
 int vfs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *new_dentry, struct inode **delegated_inode)
 {
@@ -4668,7 +4701,7 @@ out:
 
 	return error;
 }
-EXPORT_SYMBOL_GPL(vfs_rename2);
+EXPORT_SYMBOL(vfs_rename2);
 
 int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	       struct inode *new_dir, struct dentry *new_dentry,
@@ -4792,6 +4825,12 @@ retry_deleg:
 	error = vfs_rename2(old_path.mnt, old_path.dentry->d_inode, old_dentry,
 			   new_path.dentry->d_inode, new_dentry,
 			   &delegated_inode, flags);
+
+#ifdef CONFIG_FSC
+	if (fsc_enable && fsc_allow_list_cur && !error)
+		fsc_delete_absence_path_dentry(&new_path, new_dentry);
+#endif
+
 exit5:
 	dput(new_dentry);
 exit4:

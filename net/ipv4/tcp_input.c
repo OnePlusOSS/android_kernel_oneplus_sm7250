@@ -108,6 +108,11 @@ int sysctl_tcp_max_orphans __read_mostly = NR_FILE;
 #define TCP_REMNANT (TCP_FLAG_FIN|TCP_FLAG_URG|TCP_FLAG_SYN|TCP_FLAG_PSH)
 #define TCP_HP_BITS (~(TCP_RESERVED_BITS|TCP_FLAG_PSH))
 
+/* WIFI MODIFICATION */
+void (*statistic_dev_rtt)(struct sock *sk, long rtt) = NULL;
+EXPORT_SYMBOL(statistic_dev_rtt);
+/* WIFI MODIFICATION */
+
 #define REXMIT_NONE	0 /* no loss recovery to do */
 #define REXMIT_LOST	1 /* retransmit packets marked lost */
 #define REXMIT_NEW	2 /* FRTO-style transmit of unsent/new packets */
@@ -771,6 +776,11 @@ static void tcp_rtt_estimator(struct sock *sk, long mrtt_us)
 			tp->rtt_seq = tp->snd_nxt;
 			tp->mdev_max_us = tcp_rto_min_us(sk);
 		}
+		/* WIFI MODIFICATION */
+		if (sk->sk_state == TCP_ESTABLISHED && statistic_dev_rtt) {
+			statistic_dev_rtt(sk, mrtt_us);
+		}
+		/* WIFI MODIFICATION */
 	} else {
 		/* no previous measure. */
 		srtt = m << 3;		/* take the measured time to be rtt */
@@ -4683,8 +4693,7 @@ void tcp_data_ready(struct sock *sk)
 	const struct tcp_sock *tp = tcp_sk(sk);
 	int avail = tp->rcv_nxt - tp->copied_seq;
 
-	if (avail < sk->sk_rcvlowat && !tcp_rmem_pressure(sk) &&
-	    !sock_flag(sk, SOCK_DONE))
+	if (avail < sk->sk_rcvlowat && !sock_flag(sk, SOCK_DONE))
 		return;
 
 	sk->sk_data_ready(sk);

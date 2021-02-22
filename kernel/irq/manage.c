@@ -20,6 +20,8 @@
 #include <linux/sched/task.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/task_work.h>
+#include <linux/debugfs.h>
+#include <linux/uaccess.h>
 
 #include "internals.h"
 
@@ -283,11 +285,7 @@ int irq_set_affinity_locked(struct irq_data *data, const struct cpumask *mask,
 
 	if (desc->affinity_notify) {
 		kref_get(&desc->affinity_notify->kref);
-		if (!schedule_work(&desc->affinity_notify->work)) {
-			/* Work was already scheduled, drop our extra ref */
-			kref_put(&desc->affinity_notify->kref,
-				 desc->affinity_notify->release);
-		}
+		schedule_work(&desc->affinity_notify->work);
 	}
 	irqd_set(data, IRQD_AFFINITY_SET);
 
@@ -308,7 +306,6 @@ int __irq_set_affinity(unsigned int irq, const struct cpumask *mask, bool force)
 	raw_spin_unlock_irqrestore(&desc->lock, flags);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(__irq_set_affinity);
 
 int irq_set_affinity_hint(unsigned int irq, const struct cpumask *m)
 {
@@ -388,10 +385,7 @@ irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
 	raw_spin_unlock_irqrestore(&desc->lock, flags);
 
 	if (old_notify) {
-		if (cancel_work_sync(&old_notify->work)) {
-			/* Pending work had a ref, put that one too */
-			kref_put(&old_notify->kref, old_notify->release);
-		}
+		cancel_work_sync(&old_notify->work);
 		kref_put(&old_notify->kref, old_notify->release);
 	}
 
@@ -692,6 +686,87 @@ int irq_set_irq_wake(unsigned int irq, unsigned int on)
 	return ret;
 }
 EXPORT_SYMBOL(irq_set_irq_wake);
+
+/*
+ *Add debug node that can disable irq wakeup
+ */
+static char *factory_wakeup_irq[] = {
+	"pon_kpdpwr_status",
+	"pm8xxx_rtc_alarm",
+	"usbin-uv",
+	"usbin-plugin",
+	"op_usb_plug"
+};
+
+static bool irq_allow_wakeup_factory(int irq)
+{
+	int i;
+	int len = ARRAY_SIZE(factory_wakeup_irq);
+	struct irq_desc *desc = irq_to_desc(irq);
+
+	for (i = 0; i < len; i++) {
+		if (!strcmp(desc->action->name, factory_wakeup_irq[i])) {
+			pr_debug("%s: %s allow wakeup in factory\n", __func__, factory_wakeup_irq[i]);
+			return true;
+		}
+	}
+	return false;
+}
+
+static int disable_irq_wakeup_one(int irq)
+{
+	int error;
+	struct irq_desc *desc = irq_to_desc(irq);
+
+	if (irqd_is_wakeup_set(irq_get_irq_data(irq)) && !irq_allow_wakeup_factory(irq)) {
+		pr_debug("%s: will disable irq = %d; name = %s\n", __func__, irq, desc->action->name);
+		error = disable_irq_wake(irq);
+		if (error)
+			pr_err("failed to disable IRQ %d as wake source: %d\n", irq, error);
+	}
+	return error;
+}
+
+/*
+ *echo "n" > /sys/kernel/debug/irq_wakeup_mode
+ */
+ #define MAX_MSG_SIZE 20
+static ssize_t irq_wakeup_write(struct file *file, const char __user *userstr,
+		size_t len, loff_t *pos)
+{
+	char buf[MAX_MSG_SIZE + 1];
+	int irq;
+
+	if (!len || (len > MAX_MSG_SIZE))
+		return len;
+
+	copy_from_user(buf, userstr, len);
+
+	if (strncmp(buf, "n", 1) != 0)
+		return len;
+
+	irq_lock_sparse();
+	for_each_active_irq(irq)
+		disable_irq_wakeup_one(irq);
+	irq_unlock_sparse();
+
+	return len;
+}
+
+static const struct file_operations irq_wakeup_fops = {
+	.write = irq_wakeup_write,
+};
+
+static int __init irq_wakeup_init(void)
+{
+	debugfs_create_file("irq_wakeup_mode", 0220, NULL, NULL,
+			&irq_wakeup_fops);
+
+	return 0;
+}
+
+late_initcall(irq_wakeup_init);
+/************************************************************************************/
 
 /*
  * Internal function that tells the architecture code whether a

@@ -52,6 +52,10 @@
 #include <linux/bug.h>
 #include <linux/delay.h>
 
+#ifdef CONFIG_IM
+#include <linux/oem/im.h>
+#endif
+
 #include "workqueue_internal.h"
 
 enum {
@@ -1548,7 +1552,7 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	struct work_struct *work = &dwork->work;
 
 	WARN_ON_ONCE(!wq);
-#ifndef CONFIG_CFI_CLANG
+#ifndef CONFIG_CFI
 	WARN_ON_ONCE(timer->function != delayed_work_timer_fn);
 #endif
 	WARN_ON_ONCE(timer_pending(timer));
@@ -1856,6 +1860,11 @@ static struct worker *create_worker(struct worker_pool *pool)
 					      "kworker/%s", id_buf);
 	if (IS_ERR(worker->task))
 		goto fail;
+
+#ifdef CONFIG_IM
+	/* set kworker flags */
+	im_set_flag(worker->task, IM_KWORKER);
+#endif
 
 	set_user_nice(worker->task, pool->attrs->nice);
 	kthread_bind_mask(worker->task, pool->attrs->cpumask);

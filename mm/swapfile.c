@@ -3179,6 +3179,7 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		error = -EBUSY;
 		goto bad_swap_unlock_inode;
 	}
+
 	/*
 	 * Read the swap header.
 	 */

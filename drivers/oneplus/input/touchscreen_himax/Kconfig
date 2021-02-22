@@ -1,0 +1,5 @@
+	
+source "drivers/oneplus/input/touchscreen_himax/util_interface/Kconfig"
+#source "drivers/oneplus/input/touchscreen/samsung/Kconfig"
+source "drivers/oneplus/input/touchscreen_himax/himax/Kconfig"
+#source "drivers/oneplus/input/touchscreen/Goodix/Kconfig"

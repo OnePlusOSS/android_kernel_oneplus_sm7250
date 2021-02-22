@@ -9,7 +9,6 @@
 #include <linux/cache.h>
 
 extern const char linux_banner[];
-extern const char *linux_banner_ptr;
 extern const char linux_proc_banner[];
 
 #define PRINTK_MAX_SINGLE_HEADER_LEN 2
@@ -530,5 +529,5 @@ static inline void print_hex_dump_debug(const char *prefix_str, int prefix_type,
 {
 }
 #endif
-
+int force_oem_console_setup(char *str);
 #endif

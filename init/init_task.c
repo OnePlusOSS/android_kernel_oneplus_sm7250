@@ -119,6 +119,9 @@ struct task_struct init_task
 	.journal_info	= NULL,
 	INIT_CPU_TIMERS(init_task)
 	.pi_lock	= __RAW_SPIN_LOCK_UNLOCKED(init_task.pi_lock),
+#ifdef CONFIG_UXCHAIN
+	.uxchain_lock	= __RAW_SPIN_LOCK_UNLOCKED(init_task.uxchain_lock),
+#endif
 	.timer_slack_ns = 50000, /* 50 usec default slack */
 	.thread_pid	= &init_struct_pid,
 	.thread_group	= LIST_HEAD_INIT(init_task.thread_group),
@@ -180,6 +183,9 @@ struct task_struct init_task
 #endif
 #ifdef CONFIG_SECURITY
 	.security	= NULL,
+#endif
+#ifdef CONFIG_RATP
+	.cpus_suggested	= CPU_MASK_ALL,
 #endif
 };
 EXPORT_SYMBOL(init_task);

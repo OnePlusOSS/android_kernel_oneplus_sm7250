@@ -895,7 +895,7 @@ static void arch_counter_set_user_access(void)
 	 */
 	if (arch_timer_this_cpu_has_cntvct_wa() ||
 	    !IS_ENABLED(CONFIG_ARM_ARCH_TIMER_VCT_ACCESS))
-		pr_info("CPU%d: Trapping CNTVCT access\n", smp_processor_id());
+		pr_debug("CPU%d: Trapping CNTVCT access\n", smp_processor_id());
 	else
 		cntkctl |= ARCH_TIMER_USR_VCT_ACCESS_EN;
 
@@ -985,7 +985,6 @@ u32 arch_timer_get_rate(void)
 {
 	return arch_timer_rate;
 }
-EXPORT_SYMBOL_GPL(arch_timer_get_rate);
 
 bool arch_timer_evtstrm_available(void)
 {
@@ -1013,7 +1012,6 @@ void arch_timer_mem_get_cval(u32 *lo, u32 *hi)
 		*hi = readl_relaxed_no_log(arch_counter_base + CNTCVAL_HI);
 	}
 }
-EXPORT_SYMBOL_GPL(arch_timer_mem_get_cval);
 
 static u64 arch_counter_get_cntvct_mem(void)
 {

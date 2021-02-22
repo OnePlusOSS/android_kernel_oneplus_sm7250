@@ -998,32 +998,33 @@ static void svm_cpu_uninit(int cpu)
 static int svm_cpu_init(int cpu)
 {
 	struct svm_cpu_data *sd;
+	int r;
 
 	sd = kzalloc(sizeof(struct svm_cpu_data), GFP_KERNEL);
 	if (!sd)
 		return -ENOMEM;
 	sd->cpu = cpu;
+	r = -ENOMEM;
 	sd->save_area = alloc_page(GFP_KERNEL);
 	if (!sd->save_area)
-		goto free_cpu_data;
+		goto err_1;
 
 	if (svm_sev_enabled()) {
+		r = -ENOMEM;
 		sd->sev_vmcbs = kmalloc_array(max_sev_asid + 1,
 					      sizeof(void *),
 					      GFP_KERNEL);
 		if (!sd->sev_vmcbs)
-			goto free_save_area;
+			goto err_1;
 	}
 
 	per_cpu(svm_data, cpu) = sd;
 
 	return 0;
 
-free_save_area:
-	__free_page(sd->save_area);
-free_cpu_data:
+err_1:
 	kfree(sd);
-	return -ENOMEM;
+	return r;
 
 }
 
@@ -1916,10 +1917,6 @@ static void __unregister_enc_region_locked(struct kvm *kvm,
 static struct kvm *svm_vm_alloc(void)
 {
 	struct kvm_svm *kvm_svm = vzalloc(sizeof(struct kvm_svm));
-
-	if (!kvm_svm)
-		return NULL;
-
 	return &kvm_svm->kvm;
 }
 

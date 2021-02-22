@@ -15,7 +15,6 @@
 #include "f2fs.h"
 #include "segment.h"
 #include "gc.h"
-#include <trace/events/f2fs.h>
 
 static struct proc_dir_entry *f2fs_proc_root;
 
@@ -110,47 +109,47 @@ static ssize_t features_show(struct f2fs_attr *a,
 		return sprintf(buf, "0\n");
 
 	if (f2fs_sb_has_encrypt(sbi))
-		len += scnprintf(buf, PAGE_SIZE - len, "%s",
+		len += snprintf(buf, PAGE_SIZE - len, "%s",
 						"encryption");
 	if (f2fs_sb_has_blkzoned(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "blkzoned");
 	if (f2fs_sb_has_extra_attr(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "extra_attr");
 	if (f2fs_sb_has_project_quota(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "projquota");
 	if (f2fs_sb_has_inode_chksum(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "inode_checksum");
 	if (f2fs_sb_has_flexible_inline_xattr(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "flexible_inline_xattr");
 	if (f2fs_sb_has_quota_ino(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "quota_ino");
 	if (f2fs_sb_has_inode_crtime(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "inode_crtime");
 	if (f2fs_sb_has_lost_found(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "lost_found");
 	if (f2fs_sb_has_verity(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "verity");
 	if (f2fs_sb_has_sb_chksum(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "sb_checksum");
 	if (f2fs_sb_has_casefold(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "casefold");
 	if (f2fs_sb_has_compression(sbi))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "compression");
-	len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+	len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "pin_file");
-	len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+	len += snprintf(buf + len, PAGE_SIZE - len, "\n");
 	return len;
 }
 
@@ -186,12 +185,6 @@ static ssize_t encoding_show(struct f2fs_attr *a,
 			sb->s_encoding->version & 0xff);
 #endif
 	return sprintf(buf, "(none)");
-}
-
-static ssize_t mounted_time_sec_show(struct f2fs_attr *a,
-		struct f2fs_sb_info *sbi, char *buf)
-{
-	return sprintf(buf, "%llu", SIT_I(sbi)->mounted_time);
 }
 
 #ifdef CONFIG_F2FS_STAT_FS
@@ -242,16 +235,16 @@ static ssize_t f2fs_sbi_show(struct f2fs_attr *a,
 		int hot_count = sbi->raw_super->hot_ext_count;
 		int len = 0, i;
 
-		len += scnprintf(buf + len, PAGE_SIZE - len,
+		len += snprintf(buf + len, PAGE_SIZE - len,
 						"cold file extension:\n");
 		for (i = 0; i < cold_count; i++)
-			len += scnprintf(buf + len, PAGE_SIZE - len, "%s\n",
+			len += snprintf(buf + len, PAGE_SIZE - len, "%s\n",
 								extlist[i]);
 
-		len += scnprintf(buf + len, PAGE_SIZE - len,
+		len += snprintf(buf + len, PAGE_SIZE - len,
 						"hot file extension:\n");
 		for (i = cold_count; i < cold_count + hot_count; i++)
-			len += scnprintf(buf + len, PAGE_SIZE - len, "%s\n",
+			len += snprintf(buf + len, PAGE_SIZE - len, "%s\n",
 								extlist[i]);
 		return len;
 	}
@@ -375,19 +368,11 @@ out:
 		return count;
 	}
 
+
 	if (!strcmp(a->attr.name, "iostat_enable")) {
 		sbi->iostat_enable = !!t;
 		if (!sbi->iostat_enable)
 			f2fs_reset_iostat(sbi);
-		return count;
-	}
-
-	if (!strcmp(a->attr.name, "iostat_period_ms")) {
-		if (t < MIN_IOSTAT_PERIOD_MS || t > MAX_IOSTAT_PERIOD_MS)
-			return -EINVAL;
-		spin_lock(&sbi->iostat_lock);
-		sbi->iostat_period_ms = (unsigned int)t;
-		spin_unlock(&sbi->iostat_lock);
 		return count;
 	}
 
@@ -547,7 +532,6 @@ F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, gc_idle_interval, interval_time[GC_TIME]);
 F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info,
 		umount_discard_timeout, interval_time[UMOUNT_DISCARD_TIMEOUT]);
 F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, iostat_enable, iostat_enable);
-F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, iostat_period_ms, iostat_period_ms);
 F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, readdir_ra, readdir_ra);
 F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, gc_pin_file_thresh, gc_pin_file_threshold);
 F2FS_RW_ATTR(F2FS_SBI, f2fs_super_block, extension_list, extension_list);
@@ -555,7 +539,6 @@ F2FS_RW_ATTR(F2FS_SBI, f2fs_super_block, extension_list, extension_list);
 F2FS_RW_ATTR(FAULT_INFO_RATE, f2fs_fault_info, inject_rate, inject_rate);
 F2FS_RW_ATTR(FAULT_INFO_TYPE, f2fs_fault_info, inject_type, inject_type);
 #endif
-F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, data_io_flag, data_io_flag);
 F2FS_GENERAL_RO_ATTR(dirty_segments);
 F2FS_GENERAL_RO_ATTR(free_segments);
 F2FS_GENERAL_RO_ATTR(lifetime_write_kbytes);
@@ -563,7 +546,6 @@ F2FS_GENERAL_RO_ATTR(features);
 F2FS_GENERAL_RO_ATTR(current_reserved_blocks);
 F2FS_GENERAL_RO_ATTR(unusable);
 F2FS_GENERAL_RO_ATTR(encoding);
-F2FS_GENERAL_RO_ATTR(mounted_time_sec);
 #ifdef CONFIG_F2FS_STAT_FS
 F2FS_STAT_ATTR(STAT_INFO, f2fs_stat_info, cp_foreground_calls, cp_count);
 F2FS_STAT_ATTR(STAT_INFO, f2fs_stat_info, cp_background_calls, bg_cp_count);
@@ -593,9 +575,7 @@ F2FS_FEATURE_RO_ATTR(verity, FEAT_VERITY);
 #endif
 F2FS_FEATURE_RO_ATTR(sb_checksum, FEAT_SB_CHECKSUM);
 F2FS_FEATURE_RO_ATTR(casefold, FEAT_CASEFOLD);
-#ifdef CONFIG_F2FS_FS_COMPRESSION
 F2FS_FEATURE_RO_ATTR(compression, FEAT_COMPRESSION);
-#endif
 
 #define ATTR_LIST(name) (&f2fs_attr_##name.attr)
 static struct attribute *f2fs_attrs[] = {
@@ -628,7 +608,6 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(gc_idle_interval),
 	ATTR_LIST(umount_discard_timeout),
 	ATTR_LIST(iostat_enable),
-	ATTR_LIST(iostat_period_ms),
 	ATTR_LIST(readdir_ra),
 	ATTR_LIST(gc_pin_file_thresh),
 	ATTR_LIST(extension_list),
@@ -636,7 +615,6 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(inject_rate),
 	ATTR_LIST(inject_type),
 #endif
-	ATTR_LIST(data_io_flag),
 	ATTR_LIST(dirty_segments),
 	ATTR_LIST(free_segments),
 	ATTR_LIST(unusable),
@@ -645,7 +623,6 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(reserved_blocks),
 	ATTR_LIST(current_reserved_blocks),
 	ATTR_LIST(encoding),
-	ATTR_LIST(mounted_time_sec),
 #ifdef CONFIG_F2FS_STAT_FS
 	ATTR_LIST(cp_foreground_calls),
 	ATTR_LIST(cp_background_calls),
@@ -678,9 +655,7 @@ static struct attribute *f2fs_feat_attrs[] = {
 #endif
 	ATTR_LIST(sb_checksum),
 	ATTR_LIST(casefold),
-#ifdef CONFIG_F2FS_FS_COMPRESSION
 	ATTR_LIST(compression),
-#endif
 	NULL,
 };
 
@@ -763,33 +738,6 @@ static int __maybe_unused segment_bits_seq_show(struct seq_file *seq,
 	return 0;
 }
 
-void f2fs_record_iostat(struct f2fs_sb_info *sbi)
-{
-	unsigned long long iostat_diff[NR_IO_TYPE];
-	int i;
-
-	if (time_is_after_jiffies(sbi->iostat_next_period))
-		return;
-
-	/* Need double check under the lock */
-	spin_lock(&sbi->iostat_lock);
-	if (time_is_after_jiffies(sbi->iostat_next_period)) {
-		spin_unlock(&sbi->iostat_lock);
-		return;
-	}
-	sbi->iostat_next_period = jiffies +
-				msecs_to_jiffies(sbi->iostat_period_ms);
-
-	for (i = 0; i < NR_IO_TYPE; i++) {
-		iostat_diff[i] = sbi->rw_iostat[i] -
-				sbi->prev_rw_iostat[i];
-		sbi->prev_rw_iostat[i] = sbi->rw_iostat[i];
-	}
-	spin_unlock(&sbi->iostat_lock);
-
-	trace_f2fs_iostat(sbi, iostat_diff);
-}
-
 static int __maybe_unused iostat_info_seq_show(struct seq_file *seq,
 					       void *offset)
 {
@@ -802,51 +750,33 @@ static int __maybe_unused iostat_info_seq_show(struct seq_file *seq,
 
 	seq_printf(seq, "time:		%-16llu\n", now);
 
-	/* print app write IOs */
+	/* print app IOs */
 	seq_printf(seq, "app buffered:	%-16llu\n",
-				sbi->rw_iostat[APP_BUFFERED_IO]);
+				sbi->write_iostat[APP_BUFFERED_IO]);
 	seq_printf(seq, "app direct:	%-16llu\n",
-				sbi->rw_iostat[APP_DIRECT_IO]);
+				sbi->write_iostat[APP_DIRECT_IO]);
 	seq_printf(seq, "app mapped:	%-16llu\n",
-				sbi->rw_iostat[APP_MAPPED_IO]);
+				sbi->write_iostat[APP_MAPPED_IO]);
 
-	/* print fs write IOs */
+	/* print fs IOs */
 	seq_printf(seq, "fs data:	%-16llu\n",
-				sbi->rw_iostat[FS_DATA_IO]);
+				sbi->write_iostat[FS_DATA_IO]);
 	seq_printf(seq, "fs node:	%-16llu\n",
-				sbi->rw_iostat[FS_NODE_IO]);
+				sbi->write_iostat[FS_NODE_IO]);
 	seq_printf(seq, "fs meta:	%-16llu\n",
-				sbi->rw_iostat[FS_META_IO]);
+				sbi->write_iostat[FS_META_IO]);
 	seq_printf(seq, "fs gc data:	%-16llu\n",
-				sbi->rw_iostat[FS_GC_DATA_IO]);
+				sbi->write_iostat[FS_GC_DATA_IO]);
 	seq_printf(seq, "fs gc node:	%-16llu\n",
-				sbi->rw_iostat[FS_GC_NODE_IO]);
+				sbi->write_iostat[FS_GC_NODE_IO]);
 	seq_printf(seq, "fs cp data:	%-16llu\n",
-				sbi->rw_iostat[FS_CP_DATA_IO]);
+				sbi->write_iostat[FS_CP_DATA_IO]);
 	seq_printf(seq, "fs cp node:	%-16llu\n",
-				sbi->rw_iostat[FS_CP_NODE_IO]);
+				sbi->write_iostat[FS_CP_NODE_IO]);
 	seq_printf(seq, "fs cp meta:	%-16llu\n",
-				sbi->rw_iostat[FS_CP_META_IO]);
-
-	/* print app read IOs */
-	seq_printf(seq, "app buffered:	%-16llu\n",
-				sbi->rw_iostat[APP_BUFFERED_READ_IO]);
-	seq_printf(seq, "app direct:	%-16llu\n",
-				sbi->rw_iostat[APP_DIRECT_READ_IO]);
-	seq_printf(seq, "app mapped:	%-16llu\n",
-				sbi->rw_iostat[APP_MAPPED_READ_IO]);
-
-	/* print fs read IOs */
-	seq_printf(seq, "fs data:	%-16llu\n",
-				sbi->rw_iostat[FS_DATA_READ_IO]);
-	seq_printf(seq, "fs node:	%-16llu\n",
-				sbi->rw_iostat[FS_NODE_READ_IO]);
-	seq_printf(seq, "fs meta:	%-16llu\n",
-				sbi->rw_iostat[FS_META_READ_IO]);
-
-	/* print other IOs */
+				sbi->write_iostat[FS_CP_META_IO]);
 	seq_printf(seq, "fs discard:	%-16llu\n",
-				sbi->rw_iostat[FS_DISCARD]);
+				sbi->write_iostat[FS_DISCARD]);
 
 	return 0;
 }
@@ -872,6 +802,149 @@ static int __maybe_unused victim_bits_seq_show(struct seq_file *seq,
 	}
 	return 0;
 }
+
+#ifdef CONFIG_F2FS_OF2FS
+/* [ASTI-147]: add f2fs frag_score and undiscard_score */
+extern block_t of2fs_seg_freefrag(struct f2fs_sb_info *sbi, unsigned int segno, block_t *blocks, unsigned int n);
+static int __maybe_unused frag_score_seq_show(struct seq_file *seq, void *offset)
+{
+	struct super_block *sb = seq->private;
+	struct f2fs_sb_info *sbi = F2FS_SB(sb);
+
+	unsigned int i, total_segs =
+			le32_to_cpu(sbi->raw_super->segment_count_main);
+	block_t blocks[9], total_blocks = 0;
+	unsigned int score;
+
+	memset(blocks, 0, sizeof(blocks));
+	for (i = 0; i < total_segs; i++) {
+		total_blocks += of2fs_seg_freefrag(sbi, i,
+			blocks, ARRAY_SIZE(blocks));
+		cond_resched();
+	}
+
+	f2fs_printk(sbi, KERN_INFO "Extent Size Range: Free Blocks");
+	for (i = 0; i < ARRAY_SIZE(blocks); i++) {
+		if (!blocks[i])
+			continue;
+		else if (i < 8)
+			f2fs_printk(sbi, KERN_INFO
+				"%dK...%dK-: %u", 4<<i, 4<<(i+1), blocks[i]);
+		else
+			f2fs_printk(sbi, KERN_INFO
+				"%dM...%dM-: %u", 1<<(i-8), 1<<(i-7), blocks[i]);
+	}
+
+	score = total_blocks ? (blocks[0] + blocks[1]) * 100ULL / total_blocks : 0;
+	seq_printf(seq, "%u\n", score);
+	return 0;
+}
+
+static int __maybe_unused undiscard_score_seq_show(struct seq_file *seq, void *offset)
+{
+	struct super_block *sb = seq->private;
+	struct f2fs_sb_info *sbi = F2FS_SB(sb);
+	unsigned int undiscard_blks = 0;
+	unsigned int free_blks = sbi->user_block_count - valid_user_blocks(sbi);
+	unsigned int score;
+
+	if (SM_I(sbi) && SM_I(sbi)->dcc_info)
+		undiscard_blks =  SM_I(sbi)->dcc_info->undiscard_blks;
+	score = free_blks ? undiscard_blks * 100ULL / free_blks : 0;
+	seq_printf(seq, "%u\n", score < 100 ? score : 100);
+	return 0;
+}
+
+static int gc_opt_enable_seq_show(struct seq_file *seq, void *p)
+{
+	struct super_block *sb = seq->private;
+	struct f2fs_sb_info *sbi = F2FS_SB(sb);
+
+	seq_printf(seq, "%d\n", sbi->gc_opt_enable);
+	return 0;
+}
+
+static ssize_t gc_opt_enable_write(struct file *filp, const char __user *ubuf,
+	size_t cnt, loff_t *ppos)
+{
+	char buf[64] = { 0 };
+	int user_set_value = 0;
+	int ret = -1;
+	struct seq_file *seq = filp->private_data;
+	struct super_block *sb = seq->private;
+	struct f2fs_sb_info *sbi = F2FS_SB(sb);
+
+	if (cnt > sizeof(buf) - 1)
+		cnt = sizeof(buf) - 1;
+
+	if (copy_from_user(&buf[0], ubuf, cnt))
+		return -EFAULT;
+	ret = kstrtoint(strstrip(&buf[0]), 0, &user_set_value);
+	if (ret < 0)
+		return ret;
+
+	sbi->gc_opt_enable = !!user_set_value;
+	if (sbi->gc_opt_enable)
+		sbi->interval_time[GC_TIME] = DEF_GC_IDLE_INTERVAL;
+	else
+		sbi->interval_time[GC_TIME] = DEF_IDLE_INTERVAL;
+	return cnt;
+}
+
+static int gc_opt_enable_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, gc_opt_enable_seq_show, PDE_DATA(inode));
+}
+
+static const struct file_operations f2fs_seq_gc_opt_enable_fops = {
+	.open = gc_opt_enable_open,
+	.read = seq_read,
+	.write = gc_opt_enable_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+/* [ASTI-147]: add for oDiscard */
+static int f2fs_odiscard_enable_seq_show(struct seq_file *seq, void *p)
+{
+	seq_printf(seq, "%d\n", f2fs_odiscard_enable);
+	return 0;
+}
+
+static ssize_t f2fs_odiscard_enable_write(struct file *filp, const char __user *ubuf,
+	size_t cnt, loff_t *ppos)
+{
+	char buf[64] = { 0 };
+	int user_set_value = 0;
+	int ret = -1;
+
+	if (cnt > sizeof(buf) - 1)
+		cnt = sizeof(buf) - 1;
+
+	if (copy_from_user(&buf[0], ubuf, cnt))
+		return -EFAULT;
+
+	ret = kstrtoint(strstrip(&buf[0]), 0, &user_set_value);
+
+	if (ret < 0)
+		return ret;
+
+	f2fs_odiscard_enable = user_set_value;
+	return cnt;
+}
+static int f2fs_odiscard_enable_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, f2fs_odiscard_enable_seq_show, NULL);
+}
+
+static const struct file_operations f2fs_odiscard_enable_fops = {
+	.open = f2fs_odiscard_enable_open,
+	.read = seq_read,
+	.write = f2fs_odiscard_enable_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+#endif
 
 int __init f2fs_init_sysfs(void)
 {
@@ -921,6 +994,18 @@ int f2fs_register_sysfs(struct f2fs_sb_info *sbi)
 		sbi->s_proc = proc_mkdir(sb->s_id, f2fs_proc_root);
 
 	if (sbi->s_proc) {
+#ifdef CONFIG_F2FS_OF2FS
+		/* [ASTI-147]: add f2fs frag_score and undiscard_score */
+		/* [ASTI-147]: add for oDiscard */
+		proc_create_single_data("frag_score", 0444, sbi->s_proc,
+				frag_score_seq_show, sb);
+		proc_create_single_data("udc_score", 0444, sbi->s_proc,
+				undiscard_score_seq_show, sb);
+		proc_create_data("gc_enable", 0644, sbi->s_proc,
+				 &f2fs_seq_gc_opt_enable_fops, sb);
+		proc_create_data("dc_enable", 0644, sbi->s_proc,
+				 &f2fs_odiscard_enable_fops, sb);
+#endif
 		proc_create_single_data("segment_info", S_IRUGO, sbi->s_proc,
 				segment_info_seq_show, sb);
 		proc_create_single_data("segment_bits", S_IRUGO, sbi->s_proc,
@@ -930,16 +1015,30 @@ int f2fs_register_sysfs(struct f2fs_sb_info *sbi)
 		proc_create_single_data("victim_bits", S_IRUGO, sbi->s_proc,
 				victim_bits_seq_show, sb);
 	}
+#ifdef CONFIG_F2FS_BD_STAT
+		f2fs_build_bd_stat(sbi);
+#endif
 	return 0;
 }
 
 void f2fs_unregister_sysfs(struct f2fs_sb_info *sbi)
 {
 	if (sbi->s_proc) {
+#ifdef CONFIG_F2FS_BD_STAT
+		f2fs_destroy_bd_stat(sbi);
+#endif
 		remove_proc_entry("iostat_info", sbi->s_proc);
 		remove_proc_entry("segment_info", sbi->s_proc);
 		remove_proc_entry("segment_bits", sbi->s_proc);
 		remove_proc_entry("victim_bits", sbi->s_proc);
+#ifdef CONFIG_F2FS_OF2FS
+		/* [ASTI-147]: add f2fs frag_score and undiscard_score */
+		/* [ASTI-147]: add for oDiscard */
+		remove_proc_entry("gc_enable", sbi->s_proc);
+		remove_proc_entry("udc_score", sbi->s_proc);
+		remove_proc_entry("frag_score", sbi->s_proc);
+		remove_proc_entry("dc_enable", sbi->s_proc);
+#endif
 		remove_proc_entry(sbi->sb->s_id, f2fs_proc_root);
 	}
 	kobject_del(&sbi->s_kobj);

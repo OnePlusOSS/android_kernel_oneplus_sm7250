@@ -519,14 +519,6 @@ void __init set_smp_cross_call(void (*fn)(const struct cpumask *, unsigned int))
 		__smp_cross_call = fn;
 }
 
-static void (*__smp_update_ipi_history_cb)(int cpu);
-
-void set_update_ipi_history_callback(void (*fn)(int))
-{
-	__smp_update_ipi_history_cb = fn;
-}
-EXPORT_SYMBOL_GPL(set_update_ipi_history_callback);
-
 static const char *ipi_types[NR_IPI] __tracepoint_string = {
 #define S(x,s)	[x] = s
 	S(IPI_WAKEUP, "CPU wakeup interrupts"),
@@ -735,8 +727,7 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 
 void smp_send_reschedule(int cpu)
 {
-	if (__smp_update_ipi_history_cb)
-		__smp_update_ipi_history_cb(cpu);
+	update_ipi_history(cpu);
 	smp_cross_call_common(cpumask_of(cpu), IPI_RESCHEDULE);
 }
 

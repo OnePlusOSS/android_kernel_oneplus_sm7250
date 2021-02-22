@@ -613,7 +613,12 @@ static inline int utilization(struct f2fs_sb_info *sbi)
  * F2FS_IPUT_DISABLE - disable IPU. (=default option in LFS mode)
  */
 #define DEF_MIN_IPU_UTIL	70
+#ifdef CONFIG_F2FS_OF2FS
+/* [ASTI-147]: enlarge min_fsync_blocks to optimize performance */
+#define DEF_MIN_FSYNC_BLOCKS	20
+#else
 #define DEF_MIN_FSYNC_BLOCKS	8
+#endif
 #define DEF_MIN_HOT_BLOCKS	16
 
 #define SMALL_VOLUME_SEGMENTS	(16 * 512)	/* 16GB */
@@ -756,7 +761,7 @@ static inline unsigned long long get_mtime(struct f2fs_sb_info *sbi,
 						bool base_time)
 {
 	struct sit_info *sit_i = SIT_I(sbi);
-	time64_t diff, now = ktime_get_boottime_seconds();
+	time64_t diff, now = ktime_get_real_seconds();
 
 	if (now >= sit_i->mounted_time)
 		return sit_i->elapsed_time + now - sit_i->mounted_time;

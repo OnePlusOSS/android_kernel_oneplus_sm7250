@@ -18,7 +18,6 @@
 #include <linux/pageblock-flags.h>
 #include <linux/page-flags-layout.h>
 #include <linux/atomic.h>
-#include <linux/android_kabi.h>
 #include <asm/page.h>
 
 /* Free memory management - zoned buddy allocator.  */
@@ -61,6 +60,9 @@ enum migratetype {
 #endif
 	MIGRATE_PCPTYPES, /* the number of types on the pcp lists */
 	MIGRATE_HIGHATOMIC = MIGRATE_PCPTYPES,
+#ifdef CONFIG_DEFRAG
+	MIGRATE_UNMOVABLE_DEFRAG_POOL,
+#endif
 #ifdef CONFIG_MEMORY_ISOLATION
 	MIGRATE_ISOLATE,	/* can't allocate from here */
 #endif
@@ -155,7 +157,16 @@ enum zone_stat_item {
 #if IS_ENABLED(CONFIG_ZSMALLOC)
 	NR_ZSPAGES,		/* allocated in zsmalloc */
 #endif
+#ifdef CONFIG_SMART_BOOST
+	NR_ZONE_UID_LRU,
+#endif
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	NR_IONCACHE_PAGES,
+#endif
 	NR_FREE_CMA_PAGES,
+#ifdef CONFIG_DEFRAG
+	NR_FREE_DEFRAG_POOL,
+#endif
 	NR_VM_ZONE_STAT_ITEMS };
 
 enum node_stat_item {
@@ -191,8 +202,6 @@ enum node_stat_item {
 	NR_WRITTEN,		/* page writings since bootup */
 	NR_KERNEL_MISC_RECLAIMABLE,	/* reclaimable non-slab kernel pages */
 	NR_UNRECLAIMABLE_PAGES,
-	NR_ION_HEAP,
-	NR_ION_HEAP_POOL,
 	NR_VM_NODE_STAT_ITEMS
 };
 
@@ -244,7 +253,15 @@ struct zone_reclaim_stat {
 	unsigned long		recent_rotated[2];
 	unsigned long		recent_scanned[2];
 };
-
+#ifdef CONFIG_SMART_BOOST
+struct uid_node {
+	struct uid_node __rcu *next;
+	uid_t uid;
+	unsigned int hot_count;
+	struct list_head  page_cache_list;
+	struct rcu_head rcu;
+};
+#endif
 struct lruvec {
 	struct list_head		lists[NR_LRU_LISTS];
 	struct zone_reclaim_stat	reclaim_stat;
@@ -254,6 +271,9 @@ struct lruvec {
 	unsigned long			refaults;
 #ifdef CONFIG_MEMCG
 	struct pglist_data *pgdat;
+#endif
+#ifdef CONFIG_SMART_BOOST
+	struct uid_node **uid_hash;
 #endif
 };
 
@@ -526,11 +546,6 @@ struct zone {
 	/* Zone statistics */
 	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS];
 	atomic_long_t		vm_numa_stat[NR_VM_NUMA_STAT_ITEMS];
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 } ____cacheline_internodealigned_in_smp;
 
 enum pgdat_flags {

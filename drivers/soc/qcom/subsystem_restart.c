@@ -35,6 +35,10 @@
 #include <linux/timer.h>
 
 #include "peripheral-loader.h"
+#include <linux/proc_fs.h>
+#include <linux/oem/boot_mode.h>
+#include <linux/seq_file.h>
+#include <linux/proc_fs.h>
 
 #define DISABLE_SSR 0x9889deed
 /* If set to 0x9889deed, call to subsystem_restart_dev() returns immediately */
@@ -194,6 +198,7 @@ struct subsys_device {
 	int id;
 	int restart_level;
 	int crash_count;
+	char crash_reason[256];
 	struct subsys_soc_restart_order *restart_order;
 	bool do_ramdump_on_put;
 	struct cdev char_dev;
@@ -252,6 +257,13 @@ static ssize_t crash_count_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", to_subsys(dev)->crash_count);
 }
 static DEVICE_ATTR_RO(crash_count);
+
+static ssize_t crash_reason_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", to_subsys(dev)->crash_reason);
+}
+static DEVICE_ATTR_RO(crash_reason);
 
 static ssize_t
 restart_level_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -379,10 +391,44 @@ void subsys_default_online(struct subsys_device *dev)
 }
 EXPORT_SYMBOL(subsys_default_online);
 
+static void subsys_send_uevent_notify(struct subsys_desc *desc,	int crash_count)
+{
+	char *envp[4];
+	struct subsys_device *dev;
+
+	if (!desc)
+		return;
+
+	dev = find_subsys_device(desc->name);
+		if (!dev)
+			return;
+
+	envp[0] = kasprintf(GFP_KERNEL, "SUBSYSTEM=%s", desc->name);
+	envp[1] = kasprintf(GFP_KERNEL, "CRASHCOUNT=%d", crash_count);
+	envp[2] = kasprintf(GFP_KERNEL, "CRASHREASON=%s", dev->crash_reason);
+	envp[3] = NULL;
+	kobject_uevent_env(&desc->dev->kobj, KOBJ_CHANGE, envp);
+	pr_err("%s %s %s\n", envp[0], envp[1], envp[2]);
+	kfree(envp[2]);
+	kfree(envp[1]);
+	kfree(envp[0]);
+}
+
+void subsys_store_crash_reason(struct subsys_device *dev, char *reason)
+{
+	if (dev == NULL)
+		return;
+
+	if (reason != NULL)
+		strlcpy(dev->crash_reason, reason, sizeof(dev->crash_reason));
+}
+EXPORT_SYMBOL(subsys_store_crash_reason);
+
 static struct attribute *subsys_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_state.attr,
 	&dev_attr_crash_count.attr,
+	&dev_attr_crash_reason.attr,
 	&dev_attr_restart_level.attr,
 	&dev_attr_firmware_name.attr,
 	&dev_attr_system_debug.attr,
@@ -748,6 +794,7 @@ static int subsystem_shutdown(struct subsys_device *dev, void *data)
 	subsys_set_state(dev, SUBSYS_OFFLINE);
 	disable_all_irqs(dev);
 
+	subsys_send_uevent_notify(dev->desc, dev->crash_count);
 	return 0;
 }
 
@@ -830,6 +877,107 @@ struct subsys_device *find_subsys_device(const char *str)
 	return dev ? to_subsys(dev) : NULL;
 }
 EXPORT_SYMBOL(find_subsys_device);
+
+static int val;
+static int restart_level;/*system original val*/
+struct delayed_work op_restart_modem_work;
+
+static ssize_t proc_restart_level_all_read(struct file *p_file,
+	char __user *puser_buf, size_t count, loff_t *p_offset)
+{
+	ssize_t len = 0;
+
+	len = copy_to_user(puser_buf, val?"1":"0", 1);
+	pr_info("the restart level switch is:%d\n", val);
+	return len;
+}
+
+static ssize_t proc_restart_level_all_write(struct file *p_file,
+	const char __user *puser_buf,
+	size_t count, loff_t *p_offset)
+{
+	char subsysname[][15] = {
+		"ipa_fws",
+		"modem",
+		"adsp",
+		"cdsp",
+		"venus",
+		"npu",
+		"a620_zap"
+	};
+	int i = 0;
+	char temp[2] = {0};
+	struct subsys_device *subsys;
+	int rc;
+
+	if (copy_from_user(temp, puser_buf, 1))
+		return -EFAULT;
+
+	rc = kstrtoint(temp, 0, &val);
+	if (rc != 0)
+		return -EINVAL;
+
+	cancel_delayed_work_sync(&op_restart_modem_work);
+
+	for (i = 0; i < ARRAY_SIZE(subsysname); i++) {
+		subsys = find_subsys_device(subsysname[i]);
+		if (subsys) {
+			if (val == 1)
+				subsys->restart_level = RESET_SOC;
+			else
+				subsys->restart_level = RESET_SUBSYS_COUPLED;
+		}
+	}
+	pr_info("write the restart level switch to :%d\n", val);
+	return count;
+}
+
+static const struct file_operations restart_level_all_operations = {
+	.read = proc_restart_level_all_read,
+	.write = proc_restart_level_all_write,
+};
+
+static void init_restart_level_all_node(void)
+{
+	if (!proc_create("restart_level_all", 0644, NULL,
+			&restart_level_all_operations)){
+		pr_err("%s : Failed to register proc interface\n", __func__);
+	}
+}
+
+static void op_restart_modem_work_fun(struct work_struct *work)
+{
+	struct subsys_device *subsys = find_subsys_device("modem");
+
+	if (!subsys)
+		return;
+	subsys->restart_level = restart_level;
+	pr_err("%s:level=%d\n", __func__, subsys->restart_level);
+}
+
+int op_restart_modem_init(void)
+{
+	INIT_DELAYED_WORK(&op_restart_modem_work, op_restart_modem_work_fun);
+	return 0;
+}
+
+int op_restart_modem(void)
+{
+	struct subsys_device *subsys = find_subsys_device("modem");
+
+	if (!subsys)
+		return -ENODEV;
+	pr_err("%s:level=%d\n", __func__, subsys->restart_level);
+	restart_level = subsys->restart_level;
+	subsys->restart_level = RESET_SUBSYS_COUPLED;
+	if (subsystem_restart("modem") == -ENODEV)
+		pr_err("%s: SSR call failed\n", __func__);
+
+	schedule_delayed_work(&op_restart_modem_work,
+			msecs_to_jiffies(10*1000));
+	return 0;
+}
+EXPORT_SYMBOL(op_restart_modem);
 
 static int subsys_start(struct subsys_device *subsys)
 {
@@ -1208,6 +1356,51 @@ static void device_restart_work_hdlr(struct work_struct *work)
 	panic("subsys-restart: Resetting the SoC - %s crashed.",
 							dev->desc->name);
 }
+
+static ssize_t force_rst_write(struct file *file,
+				const char __user *buf,
+				size_t count,
+				loff_t *lo)
+{
+	char read_buf[4] = {0};
+	struct subsys_device *subsys = find_subsys_device("modem");
+
+	if (!subsys)
+		return 0;
+
+	if (copy_from_user(read_buf, buf, 1)) {
+		pr_err("%s: failed to copy from user.\n", __func__);
+		return count;
+	}
+
+	pr_info("%s: %s\n", __func__, read_buf);
+
+	if (!strncmp(read_buf, "2", 1))
+		panic("force modem crash");
+
+	if (!strncmp(read_buf, "1", 1)) {
+		pr_err("force to reset modem\n");
+		op_restart_modem();
+	}
+
+	return count;
+}
+
+static ssize_t force_rst_read(struct file *file,
+				char __user *buf,
+				size_t count,
+				loff_t *ppos)
+{
+	return count;
+}
+
+static const struct file_operations modem_force_rst_fops = {
+	.write = force_rst_write,
+	.read  = force_rst_read,
+	.open  = simple_open,
+	.owner = THIS_MODULE,
+};
+
 
 int subsystem_restart_dev(struct subsys_device *dev)
 {
@@ -1910,6 +2103,7 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 			goto err_setup_irqs;
 	}
 
+	op_restart_modem_init();
 	return subsys;
 err_setup_irqs:
 	if (subsys->desc->edge)
@@ -1981,6 +2175,7 @@ static struct notifier_block panic_nb = {
 static int __init subsys_restart_init(void)
 {
 	int ret;
+	struct proc_dir_entry *d_entry = NULL;
 
 	ssr_wq = alloc_workqueue("ssr_wq",
 		WQ_UNBOUND | WQ_HIGHPRI | WQ_CPU_INTENSIVE, 0);
@@ -2000,6 +2195,12 @@ static int __init subsys_restart_init(void)
 	ret = atomic_notifier_chain_register(&panic_notifier_list,
 			&panic_nb);
 	if (ret)
+		goto err_soc;
+
+	init_restart_level_all_node();
+
+	d_entry = proc_create_data("force_reset", 0664, NULL, &modem_force_rst_fops, NULL);
+	if (!d_entry)
 		goto err_soc;
 
 	return 0;
