@@ -44,6 +44,13 @@ struct monitor_gp {
 
 /* monitor group for dynamic tpd threads */
 static struct monitor_gp mgp[TPD_GROUP_MAX];
+#define MAX_CLUSTERS 3
+static int cluster_total;
+struct tpd_cpuinfo {
+	int first_cpu;
+	cpumask_t related_cpus;
+};
+static struct tpd_cpuinfo clusters[MAX_CLUSTERS];
 
 static atomic_t tpd_enable_rc = ATOMIC_INIT(0);
 static int tpd_enable_rc_show(char *buf, const struct kernel_param *kp)
@@ -698,9 +705,9 @@ static struct kernel_param_ops tpd_pt_ops = {
 };
 module_param_cb(tpd_dynamic, &tpd_pt_ops, NULL, 0664);
 
-int tpd_suggested(struct task_struct* tsk, int min_idx, int mid_idx, int max_idx, int request_cpu)
+int tpd_suggested(struct task_struct* tsk, int request_cluster)
 {
-	int suggest_cpu = request_cpu;
+	int suggest_cluster = request_cluster;
 
 	if (!(task_is_fg(tsk) || atomic_read(&tpd_ctl)))
 		goto out;
@@ -710,28 +717,33 @@ int tpd_suggested(struct task_struct* tsk, int min_idx, int mid_idx, int max_idx
 	case TPD_TYPE_GS:
 	case TPD_TYPE_PS:
 	case TPD_TYPE_PGS:
-		suggest_cpu = min_idx;
+		suggest_cluster = 0;
 		break;
 	case TPD_TYPE_G:
 	case TPD_TYPE_PG:
-		suggest_cpu = mid_idx;
+		suggest_cluster = 1;
 		break;
 	case TPD_TYPE_P:
-		suggest_cpu = max_idx;
+		if (cluster_total == MAX_CLUSTERS)
+			suggest_cluster = 2;
+		else
+			suggest_cluster = 1;
 		break;
 	default:
 		break;
 	}
 out:
 	tpd_logi("pid = %d: comm = %s, tpd = %d, suggest_cpu = %d, task is fg? %d, tpd_ctl = %d\n", tsk->pid, tsk->comm,
-		tsk->tpd, suggest_cpu, task_is_fg(tsk), atomic_read(&tpd_ctl));
-	return suggest_cpu;
+		tsk->tpd, suggest_cluster, task_is_fg(tsk), atomic_read(&tpd_ctl));
+	return suggest_cluster;
 }
 
-void tpd_mask(struct task_struct* tsk, int min_idx, int mid_idx, int max_idx, cpumask_t *request, int nrcpu)
+void tpd_mask(struct task_struct* tsk, cpumask_t *request)
 {
-	int start_idx = nrcpu, end_idx = -1, i, next_start_idx = nrcpu;
-	bool second_round = false;
+	int i = 0, j, x;
+	int tmp_tpd;
+
+	cpumask_t mask = CPU_MASK_NONE;
 
 	if (!(task_is_fg(tsk) || atomic_read(&tpd_ctl))) {
 		if (!task_is_fg(tsk))
@@ -739,57 +751,26 @@ void tpd_mask(struct task_struct* tsk, int min_idx, int mid_idx, int max_idx, cp
 		return;
 	}
 
-	switch (tsk->tpd) {
-	case TPD_TYPE_S:
-		start_idx = mid_idx;
-		break;
-	case TPD_TYPE_G:
-		start_idx = min_idx;
-		end_idx = mid_idx;
-		second_round = true;
-		next_start_idx = max_idx;
-		break;
-	case TPD_TYPE_GS:
-		start_idx = max_idx;
-		break;
-	case TPD_TYPE_P:
-		start_idx = min_idx;
-		end_idx = max_idx;
-		break;
-	case TPD_TYPE_PS:
-		start_idx = mid_idx;
-		end_idx = max_idx;
-		break;
-	case TPD_TYPE_PG:
-		start_idx = min_idx;
-		end_idx = mid_idx;
-		break;
-	default:
-		break;
+	tmp_tpd = tsk->tpd;
+	while (tmp_tpd > 0) {
+		if (tmp_tpd & 1) {
+			for_each_cpu(j, &clusters[i].related_cpus)
+				cpumask_set_cpu(j, &mask);
+			i++;
+		}
+		tmp_tpd = tmp_tpd >> 1;
 	}
 
-redo:
-	for (i = start_idx; i < nrcpu; ++i) {
+	cpumask_copy(request, &mask);
+	tpd_logi("tpd_mask: related_cpus = ");
+	for_each_cpu(x, request)
+		tpd_logi("%d ", x);
 
-		if (i == end_idx)
-			break;
-
-		tpd_logv("task: %d, cpu clear bit = %d\n", (tsk) ? tsk->pid : -1, i);
-
-		cpumask_clear_cpu(i, request);
-	}
-
-	if (second_round) {
-		start_idx = next_start_idx;
-		second_round = false;
-		goto redo;
-	}
-
-	tpd_logi("pid = %d: comm = %s, tpd = %d, min_idx = %d, mid_idx = %d, max_idx = %d, task is fg? %d, tpd_ctl = %d\n", tsk->pid, tsk->comm,
-		tsk->tpd, min_idx, mid_idx, max_idx, task_is_fg(tsk), atomic_read(&tpd_ctl));
+	tpd_logi("pid = %d: comm = %s, tpd = %d, task is fg? %d, tpd_ctl = %d\n", tsk->pid, tsk->comm,
+		tsk->tpd, task_is_fg(tsk), atomic_read(&tpd_ctl));
 }
 
-bool tpd_check(struct task_struct *tsk, int dest_cpu, int min_idx, int mid_idx, int max_idx)
+bool tpd_check(struct task_struct *tsk, int dest_cpu)
 {
 	bool mismatch = false;
 
@@ -798,29 +779,27 @@ bool tpd_check(struct task_struct *tsk, int dest_cpu, int min_idx, int mid_idx, 
 
 	switch (tsk->tpd) {
 	case TPD_TYPE_S:
-		if (dest_cpu >= mid_idx)
+		if (!cpumask_test_cpu(dest_cpu, &clusters[0].related_cpus))
 			mismatch = true;
 		break;
 	case TPD_TYPE_G:
-		if ((mid_idx != max_idx) &&
-				(dest_cpu < mid_idx || dest_cpu >= max_idx))
+		if (!cpumask_test_cpu(dest_cpu, &clusters[1].related_cpus))
 			mismatch = true;
 		break;
 	case TPD_TYPE_GS:
-		/* if no gold plus cores, mid = max*/
-		if (dest_cpu >= max_idx)
+		if (cluster_total == 3 && cpumask_test_cpu(dest_cpu, &clusters[2].related_cpus))
 			mismatch = true;
 		break;
 	case TPD_TYPE_P:
-		if (dest_cpu < max_idx)
+		if (cluster_total == 3 && !cpumask_test_cpu(dest_cpu, &clusters[2].related_cpus))
 			mismatch = true;
 		break;
 	case TPD_TYPE_PS:
-		if (dest_cpu < max_idx && dest_cpu >= mid_idx)
+		if (cpumask_test_cpu(dest_cpu, &clusters[1].related_cpus))
 			mismatch = true;
 		break;
 	case TPD_TYPE_PG:
-		if (dest_cpu < mid_idx)
+		if (cpumask_test_cpu(dest_cpu, &clusters[0].related_cpus))
 			mismatch = true;
 		break;
 	default:
@@ -831,6 +810,53 @@ out:
 	tpd_logi("task:%d comm:%s dst: %d should migrate = %d, task is fg? %d\n", tsk->pid, tsk->comm, dest_cpu, !mismatch, task_is_fg(tsk));
 
 	return mismatch;
+}
+
+int tpd_suggested_cpu(struct task_struct* tsk, int request_cpu)
+{
+	int suggest_cpu = request_cpu;
+	if (!(task_is_fg(tsk) || atomic_read(&tpd_ctl)))
+		goto out;
+
+	switch (tsk->tpd) {
+		case TPD_TYPE_S:
+		case TPD_TYPE_GS:
+		case TPD_TYPE_PS:
+		case TPD_TYPE_PGS:
+			suggest_cpu = clusters[0].first_cpu;
+			break;
+		case TPD_TYPE_G:
+		case TPD_TYPE_PG:
+			suggest_cpu = clusters[1].first_cpu;
+			break;
+		case TPD_TYPE_P:
+			if (cluster_total == MAX_CLUSTERS)
+				suggest_cpu = clusters[2].first_cpu;
+			else
+				suggest_cpu = clusters[1].first_cpu;
+			break;
+		default:
+			break;
+	}
+out:
+	tpd_logi("pid = %d: comm = %s, tpd = %d, suggest_cpu = %d, task is fg? %d, tpd_ctl = %d\n", tsk->pid, tsk->comm,
+	tsk->tpd, suggest_cpu, task_is_fg(tsk), atomic_read(&tpd_ctl));
+	return suggest_cpu;
+}
+
+void tpd_init_policy(struct cpufreq_policy *policy)
+{
+	struct tpd_cpuinfo *cpu_info;
+	int i;
+
+	cpu_info = &clusters[cluster_total];
+	cpu_info->first_cpu = policy->cpu;
+	cpumask_copy(&cpu_info->related_cpus, policy->related_cpus);
+	cluster_total++;
+
+	tpd_logd("policy->cpu = %d, related_cpus = ", policy->cpu);
+	for_each_cpu(i, policy->related_cpus)
+		tpd_logd("%d ", i);
 }
 
 static void tpd_mgp_init()
