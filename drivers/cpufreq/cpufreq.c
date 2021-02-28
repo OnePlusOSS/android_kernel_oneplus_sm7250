@@ -38,6 +38,9 @@
 // 2020/04/01, add for pccore CONFIG_PCCORE
 #include <oneplus/control_center/control_center_helper.h>
 #include <oneplus/houston/houston_helper.h>
+#ifdef CONFIG_TPD
+#include <linux/oem/tpd.h>
+#endif
 #define GOLD_CPU_NUMBER 6
 #define GOLD_PLUS_CPU_NUMBER 7
 
@@ -1357,6 +1360,9 @@ static int cpufreq_online(unsigned int cpu)
 			per_cpu(cpufreq_cpu_data, j) = policy;
 			add_cpu_dev_symlink(policy, j);
 		}
+#ifdef CONFIG_TPD
+		tpd_init_policy(policy);
+#endif
 	} else {
 		policy->min = policy->user_policy.min;
 		policy->max = policy->user_policy.max;

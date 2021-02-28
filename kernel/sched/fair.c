@@ -4063,7 +4063,6 @@ bias_to_this_cpu(struct task_struct *p, int cpu, int start_cpu)
 					capacity_orig_of(start_cpu));
 
 #ifdef CONFIG_TPD
-	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
 	cpumask_t mask = CPU_MASK_ALL;
 #endif
 
@@ -4075,10 +4074,7 @@ bias_to_this_cpu(struct task_struct *p, int cpu, int start_cpu)
 
 #ifdef CONFIG_TPD
 	if (is_tpd_enable() && is_tpd_task(p)) {
-
-		tpd_mask(p, rd->min_cap_orig_cpu,
-				rd->mid_cap_orig_cpu == -1 ? rd->max_cap_orig_cpu : rd->mid_cap_orig_cpu,
-				rd->max_cap_orig_cpu, &mask, nr_cpu_ids);
+		tpd_mask(p, &mask);
 		base_test = cpumask_test_cpu(cpu, &mask) && cpu_active(cpu);
 	}
 #endif
@@ -7208,9 +7204,7 @@ static int get_start_cpu(struct task_struct *p)
 
 #ifdef CONFIG_TPD
 	if ((is_dynamic_tpd_task(p) || is_tpd_task(p)) && is_tpd_enable()) {
-		start_cpu = tpd_suggested(p, rd->min_cap_orig_cpu,
-			rd->mid_cap_orig_cpu == -1 ? rd->max_cap_orig_cpu : rd->mid_cap_orig_cpu,
-			rd->max_cap_orig_cpu, start_cpu);
+		start_cpu = tpd_suggested_cpu(p, start_cpu);
 	}
 #endif
 
@@ -7255,9 +7249,6 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 	cpumask_t new_allowed_cpus;
 	unsigned int target_nr_rtg_high_prio = UINT_MAX;
 	bool rtg_high_prio_task = task_rtg_high_prio(p);
-#ifdef CONFIG_TPD
-	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
-#endif
 
 	/*
 	 * In most cases, target_capacity tracks capacity_orig of the most
@@ -7316,9 +7307,7 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 
 #ifdef CONFIG_TPD
 	if (is_tpd_enable() && is_tpd_task(p)) {
-		tpd_mask(p, rd->min_cap_orig_cpu,
-			rd->mid_cap_orig_cpu == -1 ? rd->max_cap_orig_cpu : rd->mid_cap_orig_cpu,
-			rd->max_cap_orig_cpu, &new_allowed_cpus, nr_cpu_ids);
+		tpd_mask(p, &new_allowed_cpus);
 	}
 #endif
 	do {
@@ -8236,7 +8225,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	if (task_placement_boost_enabled(p) || fbt_env.need_idle || boosted ||
 		is_rtg || __cpu_overutilized(prev_cpu, delta) ||
 		!task_fits_max(p, prev_cpu) || cpu_isolated(prev_cpu) || is_ratp_enable() ||
-		is_tpd_enable()) {
+		(is_tpd_enable() && is_tpd_task(p))) {
 #else
 	if (task_placement_boost_enabled(p) || fbt_env.need_idle || boosted ||
 	    is_rtg || __cpu_overutilized(prev_cpu, delta) ||
@@ -9110,15 +9099,10 @@ static inline int migrate_degrades_locality(struct task_struct *p,
 static inline bool can_migrate_boosted_task(struct task_struct *p,
 			int src_cpu, int dst_cpu)
 {
-#if defined(CONFIG_RATP) || defined(CONFIG_TPD)
-	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
-#endif
-
-#ifdef CONFIG_TPD
-	int mid_core;
-#endif
 
 #ifdef CONFIG_RATP
+	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
+
 	if (is_ratp_enable()) {
 		/*avoid rendering task migrate to sliver core*/
 		if (im_rendering(p) && prefer_sched_group(p) &&
@@ -9134,8 +9118,7 @@ static inline bool can_migrate_boosted_task(struct task_struct *p,
 #ifdef CONFIG_TPD
 	if (is_tpd_enable() && is_tpd_task(p)) {
 		/*avoid task migrate to wrong tpd suggested cpu*/
-		mid_core = rd->mid_cap_orig_cpu == -1 ? rd->max_cap_orig_cpu : rd->mid_cap_orig_cpu;
-		if (tpd_check(p, dst_cpu, rd->min_cap_orig_cpu, mid_core, rd->max_cap_orig_cpu))
+		if (tpd_check(p, dst_cpu))
 			return false;
 	}
 #endif
