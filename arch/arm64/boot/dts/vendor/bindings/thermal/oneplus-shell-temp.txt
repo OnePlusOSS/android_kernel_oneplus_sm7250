@@ -1,0 +1,9 @@
+===============================================================================
+Shell Temperature Fitting driver:
+===============================================================================
+
+Temperature fitting for the front, frame, and back of devices
+
+Required Parameters:
+- compatible: must be 'oneplus,shell-temp' for shell-temp driver.
+

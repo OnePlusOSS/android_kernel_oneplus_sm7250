@@ -1,0 +1,3 @@
+
+source "drivers/oneplus/input/touchscreen/Goodix/GT9886/Kconfig"
+source "drivers/oneplus/input/touchscreen/Goodix/GT9897/Kconfig"

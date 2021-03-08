@@ -216,6 +216,9 @@ void mhi_ring_cmd_db(struct mhi_controller *mhi_cntrl, struct mhi_cmd *mhi_cmd)
 	db = ring->iommu_base + (ring->wp - ring->base);
 	*ring->ctxt_wp = db;
 	mhi_write_db(mhi_cntrl, ring->db_addr, db);
+
+	/* smp update */
+	smp_wmb();
 }
 
 void mhi_ring_chan_db(struct mhi_controller *mhi_cntrl,

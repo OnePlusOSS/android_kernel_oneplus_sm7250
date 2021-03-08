@@ -133,6 +133,7 @@ struct qpnp_qg {
 	bool			qg_device_open;
 	bool			profile_loaded;
 	bool			battery_missing;
+	bool			iskebab;
 	bool			data_ready;
 	bool			suspend_data;
 	bool			vbat_low;
@@ -145,6 +146,7 @@ struct qpnp_qg {
 	bool			fvss_active;
 	bool			tcss_active;
 	bool			bass_active;
+	bool			use_external_fg;
 	int			charge_status;
 	int			charge_type;
 	int			chg_iterm_ma;
