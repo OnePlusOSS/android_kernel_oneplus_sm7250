@@ -2162,7 +2162,6 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 
 		if (dwc->revision >= DWC3_REVISION_194A)
 			reg &= ~DWC3_DCTL_KEEP_CONNECT;
-
 		dwc3_event_buffers_setup(dwc);
 		__dwc3_gadget_start(dwc);
 
@@ -2992,14 +2991,7 @@ static int dwc3_gadget_ep_reclaim_trb_linear(struct dwc3_ep *dep,
 
 static bool dwc3_gadget_ep_request_completed(struct dwc3_request *req)
 {
-	/*
-	 * For OUT direction, host may send less than the setup
-	 * length. Return true for all OUT requests.
-	 */
-	if (!req->direction)
-		return true;
-
-	return req->request.actual == req->request.length;
+	return req->num_pending_sgs == 0;
 }
 
 static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
@@ -3034,8 +3026,7 @@ static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
 
 	req->request.actual = req->request.length - req->remaining;
 
-	if (!dwc3_gadget_ep_request_completed(req) ||
-			req->num_pending_sgs) {
+	if (!dwc3_gadget_ep_request_completed(req)) {
 		__dwc3_gadget_kick_transfer(dep);
 		goto out;
 	}
@@ -3422,8 +3413,6 @@ static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
 	dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
 	dwc->b_suspend = false;
 	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT, 0);
-
-	usb_gadget_vbus_draw(&dwc->gadget, 100);
 
 	dwc3_reset_gadget(dwc);
 
@@ -3837,8 +3826,6 @@ static void dwc3_gadget_interrupt(struct dwc3 *dwc,
 			if (dwc->gadget.state >= USB_STATE_CONFIGURED)
 				dwc3_gadget_suspend_interrupt(dwc,
 						event->event_info);
-			else
-				usb_gadget_vbus_draw(&dwc->gadget, 2);
 		}
 		break;
 	case DWC3_DEVICE_EVENT_SOF:
@@ -4010,6 +3997,14 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 	count &= DWC3_GEVNTCOUNT_MASK;
 	if (!count)
 		return IRQ_NONE;
+
+	if (count > evt->length) {
+		dev_err(dwc->dev, "HUGE_EVCNT(%d)", count);
+		dbg_event(0xFF, "HUGE_EVCNT", count);
+		evt->lpos = (evt->lpos + count) % DWC3_EVENT_BUFFERS_SIZE;
+		dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(0), count);
+		return IRQ_HANDLED;
+	}
 
 	evt->count = count;
 	evt->flags |= DWC3_EVENT_PENDING;

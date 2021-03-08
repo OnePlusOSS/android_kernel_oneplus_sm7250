@@ -418,6 +418,7 @@ LINUXINCLUDE    := \
 		-I$(objtree)/arch/$(SRCARCH)/include/generated \
 		$(if $(KBUILD_SRC), -I$(srctree)/include) \
 		-I$(objtree)/include \
+		-I$(srctree)/drivers/oneplus/include \
 		$(USERINCLUDE)
 
 KBUILD_AFLAGS   := -D__ASSEMBLY__
@@ -590,7 +591,7 @@ export KBUILD_MODULES KBUILD_BUILTIN
 ifeq ($(KBUILD_EXTMOD),)
 # Objects we will link into vmlinux / subdirs we need to visit
 init-y		:= init/
-drivers-y	:= drivers/ sound/ firmware/ techpack/
+drivers-y	:= drivers/ sound/ firmware/ techpack/ opslalib/
 net-y		:= net/
 libs-y		:= lib/
 core-y		:= usr/

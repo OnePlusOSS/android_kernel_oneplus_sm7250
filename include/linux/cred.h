@@ -410,5 +410,32 @@ do {						\
 	*(_fsuid) = __cred->fsuid;		\
 	*(_fsgid) = __cred->fsgid;		\
 } while(0)
+/*2020-06-20 [OSP-5970] add for heathinfo start*/
+extern bool is_fg(int uid);
+static inline int task_is_fg(struct task_struct *task)
+{	int cur_uid;
+	cur_uid = task_uid(task).val;
+	if (is_fg(cur_uid))
+		return 1;
+	return 0;
+} /*2020-06-20 [OSP-5970] end*/
+
+#ifdef CONFIG_ONEPLUS_FG_OPT
+extern bool is_fg(int uid);
+static inline int current_is_fg(void)
+{
+	int cur_uid;
+
+	cur_uid = current_uid().val;
+	if (is_fg(cur_uid))
+		return 1;
+	return 0;
+}
+#else
+static inline int current_is_fg(void)
+{
+	return 0;
+}
+#endif /*CONFIG_ONEPLUS_FG_OPT*/
 
 #endif /* _LINUX_CRED_H */

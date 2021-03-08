@@ -83,6 +83,10 @@
 #endif
 
 #include "tune.h"
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+/*2020-06-20 [OSP-5970] add for healthinfo*/
+#include <linux/oem/oneplus_healthinfo.h>
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 
 struct rq;
 struct cpuidle_state;
@@ -91,6 +95,14 @@ extern __read_mostly bool sched_predl;
 extern unsigned int sched_capacity_margin_up[NR_CPUS];
 extern unsigned int sched_capacity_margin_down[NR_CPUS];
 
+#if defined(CONFIG_IM) || defined(CONFIG_HOUSTON)
+extern int group_show(struct seq_file *m, void *v);
+extern void group_remove(void);
+#else
+static inline int group_show(struct seq_file *m, void *v) {return 0; }
+static inline void group_remove(void) {}
+#endif
+
 struct sched_walt_cpu_load {
 	unsigned long nl;
 	unsigned long pl;
@@ -98,6 +110,7 @@ struct sched_walt_cpu_load {
 	u64 ws;
 };
 
+extern unsigned int sysctl_sched_skip_affinity;
 #ifdef CONFIG_SCHED_WALT
 extern unsigned int sched_ravg_window;
 
@@ -143,6 +156,10 @@ struct sched_cluster {
 	unsigned int max_possible_freq;
 	bool freq_init_done;
 	u64 aggr_grp_load;
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+/*2020-06-20 [OSP-5970] add for healthinfo--overload*/
+	struct sched_stat_para *overload;
+#endif
 };
 
 extern cpumask_t asym_cap_sibling_cpus;
@@ -1113,7 +1130,13 @@ struct rq {
 #ifdef CONFIG_SMP
 	struct llist_head	wake_list;
 #endif
-
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+/*2020-06-20 [OSP-5970] add for healthinfo*/
+	unsigned int ux_nr_running;
+	u64 cfs_ol_start;
+	u64 ux_ol_start;
+	u64 irqsoff_start_time;
+#endif
 #ifdef CONFIG_CPU_IDLE
 	/* Must be inspected within a rcu lock section */
 	struct cpuidle_state	*idle_state;
@@ -2046,7 +2069,11 @@ static inline void add_nr_running(struct rq *rq, unsigned count)
 
 	sched_update_nr_prod(cpu_of(rq), count, true);
 	rq->nr_running = prev_nr + count;
-
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+/*2020-06-20 [OSP-5970] add for healthinfo*/
+	if (prev_nr <= 5 && rq->nr_running > 5)
+		rq->cfs_ol_start = rq_clock(rq);
+#endif
 	if (prev_nr < 2 && rq->nr_running >= 2) {
 #ifdef CONFIG_SMP
 		if (!READ_ONCE(rq->rd->overload))
@@ -2059,8 +2086,21 @@ static inline void add_nr_running(struct rq *rq, unsigned count)
 
 static inline void sub_nr_running(struct rq *rq, unsigned count)
 {
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	/*2020-06-20 [OSP-5970] add for healthinfo*/
+	u64 delta;
+	unsigned int prev_nr = rq->nr_running;
+#endif
 	sched_update_nr_prod(cpu_of(rq), count, false);
 	rq->nr_running -= count;
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	/*2020-06-20 [OSP-5970] add for healthinfo*/
+	if (prev_nr > 5 && rq->nr_running <= 5) {
+		delta = rq_clock(rq) - rq->cfs_ol_start;
+		rq->cfs_ol_start = 0;
+		ohm_overload_record(rq, (delta >> 20));
+	}
+#endif
 	/* Check if we still need preemption */
 	sched_update_tick_dependency(rq);
 }

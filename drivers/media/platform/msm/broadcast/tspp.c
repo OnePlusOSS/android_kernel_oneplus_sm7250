@@ -3080,7 +3080,7 @@ static int msm_tspp_probe(struct platform_device *pdev)
 	for (i = 0; i < TSPP_TSIF_INSTANCES; i++)
 		tsif_debugfs_init(&device->tsif[i], i);
 
-	wakeup_source_init(&device->ws, dev_name(&pdev->dev));
+	wakeup_source_register(&(pdev->dev), dev_name(&pdev->dev));
 
 	/* set up pointers to ram-based 'registers' */
 	device->filters[0] = device->base + TSPP_PID_FILTER_TABLE0;

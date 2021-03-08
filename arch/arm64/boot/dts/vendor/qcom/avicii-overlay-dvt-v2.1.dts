@@ -1,0 +1,24 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include "lito-mtp.dtsi"
+
+#include "avicii.dtsi"
+#include "avicii-dvt-v2.1.dtsi"
+#include "camera/lito-oem-camera-avicii.dtsi" /* Camera may use same hardware */
+
+
+/ {
+	model = "Qualcomm Technologies, Inc. Lito MTP dvt V2.1 20801 53";
+	compatible = "qcom,lito-mtp", "qcom,lito", "qcom,mtp";
+	qcom,board-id = <8 0>;
+	/*we can add project id to this array,uefi can auto read it,if new project,we add to this array */
+	oem,project-id = <20801>;
+	/*we can add hw id to this array,uefi can auto read it,if new hw,we add to this array  */
+	oem,hw-id = <53>;
+};
+
+&ufsphy_mem {
+	/delete-property/ vdda-phy-always-on;
+};

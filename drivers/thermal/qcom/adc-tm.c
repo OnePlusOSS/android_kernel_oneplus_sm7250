@@ -14,6 +14,10 @@
 #include <linux/iio/iio.h>
 #include "adc-tm.h"
 
+#ifdef CONFIG_HOUSTON
+#include <oneplus/houston/houston_helper.h>
+#endif
+
 LIST_HEAD(adc_tm_device_list);
 
 static int adc_tm_get_temp(void *data, int *temp)
@@ -118,6 +122,11 @@ static int adc_tm_register_tzd(struct adc_tm_chip *adc_tm, int dt_chan_num,
 				continue;
 			}
 			adc_tm->sensor[i].tzd = tzd;
+
+#ifdef CONFIG_HOUSTON
+			ht_register_thermal_zone_device(adc_tm->sensor[i].tzd);
+#endif
+
 		} else
 			adc_tm->sensor[i].tzd = NULL;
 	}

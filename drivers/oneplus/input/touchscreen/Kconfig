@@ -1,0 +1,9 @@
+	
+source "drivers/oneplus/input/touchscreen/util_interface/Kconfig"
+source "drivers/oneplus/input/touchscreen/samsung/Kconfig"
+source "drivers/oneplus/input/touchscreen/synaptics/Kconfig"
+source "drivers/oneplus/input/touchscreen/Goodix/Kconfig"
+
+config OP_TOUCHSCREEN
+	default y
+	bool "Enable/Disable the touchscreen common driver"

@@ -4446,6 +4446,7 @@ static int hub_set_address(struct usb_device *udev, int devnum)
 	return retval;
 }
 
+#if 0
 /*
  * There are reports of USB 3.0 devices that say they support USB 2.0 Link PM
  * when they're plugged into a USB 2.0 port, but they don't work when LPM is
@@ -4466,12 +4467,17 @@ static void hub_set_initial_usb2_lpm_policy(struct usb_device *udev)
 	if (hub)
 		connect_type = hub->ports[udev->portnum - 1]->connect_type;
 
+/* @bsp, 2019/09/18 usb & PD porting */
+	if (!udev->bos)
+		return;
+
 	if ((udev->bos->ext_cap->bmAttributes & cpu_to_le32(USB_BESL_SUPPORT)) ||
 			connect_type == USB_PORT_CONNECT_TYPE_HARD_WIRED) {
 		udev->usb2_hw_lpm_allowed = 1;
 		usb_enable_usb2_hardware_lpm(udev);
 	}
 }
+#endif
 
 static int hub_enable_device(struct usb_device *udev)
 {
@@ -4835,7 +4841,7 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 	/* notify HCD that we have a device connected and addressed */
 	if (hcd->driver->update_device)
 		hcd->driver->update_device(hcd, udev);
-	hub_set_initial_usb2_lpm_policy(udev);
+	/* hub_set_initial_usb2_lpm_policy(udev); */
 fail:
 	if (retval) {
 		hub_port_disable(hub, port1, 0);
