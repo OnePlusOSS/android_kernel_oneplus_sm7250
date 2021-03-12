@@ -154,6 +154,8 @@ enum print_reason {
 #define DCIN_ICL_STEP_UA		100000
 #define ROLE_REVERSAL_DELAY_MS		500
 
+#define CHARGER_SWARP_65W		4
+
 enum smb_mode {
 	PARALLEL_MASTER = 0,
 	PARALLEL_SLAVE,
@@ -896,6 +898,8 @@ extern int op_pdo_select(int vbus_mv, int ibus_ma);
 extern int op_usbpd_send_svdm(u16 svid, u8 cmd,
 		enum usbpd_svdm_cmd_type cmd_type, int obj_pos,
 		const u32 *vdos, int num_vdos);
+extern void enhance_dash_type_set(int type);
+
 /* @bsp, 2019/07/05 Battery & Charging porting */
 void op_bus_vote(int disable);
 int get_prop_fast_adapter_update(struct smb_charger *chg);

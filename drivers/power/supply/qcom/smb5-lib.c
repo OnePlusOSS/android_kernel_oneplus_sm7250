@@ -60,6 +60,7 @@
 #define BATT_TEMP_HYST                20
 #define DASH_VALID_TEMP_LOW_THRESHOLD	125
 #define DASH_VALID_TEMP_HIG_THRESHOLD	430
+#define DASH_VALID_CAPACITY_HIG_THRESHOLD 90
 
 #define PDO_SELECTION_INTERVAL_MS	5000
 
@@ -8077,6 +8078,12 @@ static void pd_skin_thermal_check_work(struct work_struct *work)
 			msecs_to_jiffies(PD_CHECK_INTERVAL_PERIOD));
 }
 
+void op_set_swarp_charger(struct smb_charger *chg)
+{
+	chg->real_charger_type = POWER_SUPPLY_TYPE_DASH;
+	enhance_dash_type_set(CHARGER_SWARP_65W);
+}
+
 /* @bsp, 2020/08/04, add to detect SVID */
 static void pps_usbpd_connect_cb(struct usbpd_svid_handler *hdlr,
 		bool peer_usb_comm)
@@ -8091,6 +8098,7 @@ static void pps_usbpd_connect_cb(struct usbpd_svid_handler *hdlr,
 			cancel_delayed_work(&chg->check_switch_dash_work);
 			schedule_delayed_work(&chg->check_switch_dash_work, msecs_to_jiffies(500));
 		}
+		op_set_swarp_charger(chg);
 	}
 	pr_info("SWARP adapter connected!\n");
 }
@@ -8280,10 +8288,12 @@ bool is_fastchg_allowed(struct smb_charger *chg)
 	static int pre_temp;
 	static bool pre_switch_to_normal;
 	bool low_temp_full, switch_to_normal, fw_updated;
+	int cap = 0;
 
 	temp = get_prop_batt_temp(chg);
 	low_temp_full = op_get_fast_low_temp_full(chg);
 	fw_updated = get_fastchg_firmware_updated_status(chg);
+	cap = get_prop_batt_capacity(chg);
 
 	if (!chg->chg_enabled)
 		return false;
@@ -8299,6 +8309,13 @@ bool is_fastchg_allowed(struct smb_charger *chg)
 			pr_err("temp=%d is not allow to switch fastchg\n",
 					temp);
 		pre_temp = temp;
+		return false;
+	}
+
+	if (chg->swarp_online
+		&& cap > DASH_VALID_CAPACITY_HIG_THRESHOLD
+		&& (get_boot_mode() != MSM_BOOT_MODE_CHARGE)) {
+		pr_err("capacity high, swarp adapter.");
 		return false;
 	}
 
