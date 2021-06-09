@@ -178,8 +178,9 @@ bool is_dynamic_tpd_task(struct task_struct *tsk)
 	/* return if current has dead */
 	if (current->exit_state)
 		return ret;
-
+	rcu_read_lock();
 	leader = find_task_by_vpid(tsk->tgid);
+	rcu_read_unlock();
 	if (leader == NULL)
 		return ret;
 
