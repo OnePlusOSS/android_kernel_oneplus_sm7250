@@ -568,7 +568,8 @@ struct a_board_version{
 struct main_board_info{
    int  prj_version;
    int  hw_version;
-   int  rf_version;
+   int  rf_min;
+   int  rf_max;
    char  version_name[32];
 };
 
@@ -579,39 +580,49 @@ struct a_board_version a_board_version_string_arry_gpio[]={
 };
 
 struct main_board_info main_board_info_check[]={
-	/*  prj      hw       rf        version*/
-	{   11     ,  11     , NONDEFINE      ,"19811 T0"},
-	{   11     ,  12     , NONDEFINE      ,"19811 EVT1"},
-	{   11     ,  13     , NONDEFINE      ,"19811 EVT2"},
-	{   11     ,  14     , NONDEFINE      ,"19811 DVT"},
-	{   11     ,  15     , NONDEFINE      ,"19811 PVT/MP"},
-	{   11     ,  51     , NONDEFINE      ,"19811 EVT2 SEC"},
-	{   11     ,  52     , NONDEFINE      ,"19811 DVT SEC"},
-	{   11     ,  53     , NONDEFINE      ,"19811 PVT/MP SEC"},
+	/*  prj      hw       rf_min        rf_max       version*/
+	{   11     ,  11     , NONDEFINE  , NONDEFINE  , "19811 T0"},
+	{   11     ,  12     , NONDEFINE  ,  NONDEFINE , "19811 EVT1"},
+	{   11     ,  13     , NONDEFINE  ,  NONDEFINE , "19811 EVT2"},
+	{   11     ,  14     , NONDEFINE  ,  NONDEFINE , "19811 DVT"},
+	{   11     ,  15     , NONDEFINE  ,  NONDEFINE , "19811 PVT/MP"},
+	{   11     ,  51     , NONDEFINE  ,  NONDEFINE , "19811 EVT2 SEC"},
+	{   11     ,  52     , NONDEFINE  ,  NONDEFINE , "19811 DVT SEC"},
+	{   11     ,  53     , NONDEFINE  ,  NONDEFINE , "19811 PVT/MP SEC"},
 
-	{   12     ,  11     , 12     ,"19855 T0"},
-	{   12     ,  12     , 12     ,"19855 EVT1"},
-	{   12     ,  13     , 12     ,"19855 EVT2"},
-	{   12     ,  14     , 12     ,"19855 DVT"},
-	{   12     ,  15     , 12     ,"19855 PVT/MP"},
+	{   12     ,  11     , 12   ,  NONDEFINE , "19855 T0"},
+	{   12     ,  12     , 12   ,  NONDEFINE , "19855 EVT1"},
+	{   12     ,  13     , 12   ,  NONDEFINE , "19855 EVT2"},
+	{   12     ,  14     , 12   ,  NONDEFINE , "19855 DVT"},
+	{   12     ,  15     , 12   ,  NONDEFINE , "19855 PVT/MP"},
 
 
-	{   12     ,  11     , NONDEFINE      ,"19821 T0"},
-	{   12     ,  12     , NONDEFINE      ,"19821 EVT1"},
-	{   12     ,  13     , NONDEFINE      ,"19821 EVT2"},
-	{   12     ,  14     , NONDEFINE      ,"19821 DVT"},
-	{   12     ,  54     , NONDEFINE      ,"19821 EVT2 SEC"},
-	{   12     ,  55     , NONDEFINE      ,"19821 DVT SEC"},
-	{   12     ,  15     , NONDEFINE      ,"19821 PVT/MP"},
+	{   12     ,  11     , NONDEFINE  , NONDEFINE  , "19821 T0"},
+	{   12     ,  12     , NONDEFINE  , NONDEFINE  , "19821 EVT1"},
+	{   12     ,  13     , NONDEFINE  , NONDEFINE  , "19821 EVT2"},
+	{   12     ,  14     , NONDEFINE  , NONDEFINE  , "19821 DVT"},
+	{   12     ,  54     , NONDEFINE  , NONDEFINE  , "19821 EVT2 SEC"},
+	{   12     ,  55     , NONDEFINE  , NONDEFINE  , "19821 DVT SEC"},
+	{   12     ,  15     , NONDEFINE  , NONDEFINE  , "19821 PVT/MP"},
 
-	{   13     ,  11     , NONDEFINE      ,"19867 T0"},
-	{   13     ,  12     , NONDEFINE      ,"19867 EVT1"},
-	{   13     ,  13     , NONDEFINE      ,"19867 EVT2"},
-	{   13     ,  14     , NONDEFINE      ,"19867 DVT"},
-	{   13     ,  15     , NONDEFINE      ,"19867 PVT/MP"},
+	{   13     ,  11     , NONDEFINE  , NONDEFINE  , "19867 T0"},
+	{   13     ,  12     , NONDEFINE  , NONDEFINE  , "19867 EVT1"},
+	{   13     ,  13     , NONDEFINE  , NONDEFINE  , "19867 EVT2"},
+	{   13     ,  14     , NONDEFINE  , NONDEFINE  , "19867 DVT"},
+	{   13     ,  15     , NONDEFINE  , NONDEFINE  , "19867 PVT/MP"},
 
-	{   11     ,  11     ,NONDEFINE,"19811 T0"},
-	{NONDEFINE,NONDEFINE,NONDEFINE,"Unknown"}
+	{   11     ,  11     ,NONDEFINE, NONDEFINE , "19811 T0"},
+
+        /* board info for 20801 */
+        {   11     ,  11     , 13  , 14    ,"T0"},
+        {   11     ,  12     , 13  , 14    ,"EVT1"},
+        {   11     ,  13     , 13  , 14    ,"DVT"},
+        {   11     ,  14     , 13  , 14    ,"PVT"},
+        {   11     ,  34     , 13  , 14    ,"PVT"},
+        {   11     ,  53     , 13  , 14    ,"DVT"},
+        {   11     ,  54     , 13  , 14    ,"PVT"},
+        /* board info for 20801 end */
+	{NONDEFINE , NONDEFINE , NONDEFINE , NONDEFINE , "Unknown"}
 };
 
 uint32 get_hw_version(void)
@@ -676,8 +687,7 @@ int __init init_project_info(void)
     {
         if(project_info_desc->prj_version == main_board_info_check[i].prj_version &&
            project_info_desc->hw_version  == main_board_info_check[i].hw_version &&
-          (project_info_desc->rf_v1  == main_board_info_check[i].rf_version ||
-           NONDEFINE   == main_board_info_check[i].rf_version ))
+          ((project_info_desc->rf_v1 >= main_board_info_check[i].rf_min && project_info_desc->rf_v1 <= main_board_info_check[i].rf_max) || (NONDEFINE   == main_board_info_check[i].rf_max)))
         {
            p = &main_board_info_check[i].version_name[0];
            break;
