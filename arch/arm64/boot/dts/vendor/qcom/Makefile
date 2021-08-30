@@ -86,15 +86,9 @@ orchid-cdp-overlay.dtbo-base := orchid.dtb
 else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
         dtbo-$(CONFIG_ARCH_LITO) += \
-                avicii-overlay-dvt.dtbo \
-                avicii-overlay-dvt-v2.1.dtbo \
-                avicii-overlay-pvt.dtbo \
-                avicii-overlay-pvt-v2.1.dtbo
+                avicii-overlay.dtbo \
 
-avicii-overlay-dvt.dtbo-base := lito.dtb
-avicii-overlay-dvt-v2.1.dtbo-base := lito.dtb
-avicii-overlay-pvt.dtbo-base := lito.dtb
-avicii-overlay-pvt-v2.1.dtbo-base := lito.dtb
+avicii-overlay.dtbo-base := lito.dtb
 
 else
 dtb-$(CONFIG_ARCH_LITO) += lito-rumi.dtb \
