@@ -24,6 +24,7 @@
 #ifdef CONFIG_HOUSTON
 #include <oneplus/houston/houston_helper.h>
 #endif
+#include <linux/oem/cpufreq_bouncing.h>
 
 struct sugov_tunables {
 	struct gov_attr_set	attr_set;
@@ -724,6 +725,8 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 	struct cpufreq_policy *policy = sg_policy->policy;
 #endif
 
+	cb_update(sg_policy->policy, time);
+
 	if (!sg_policy->tunables->pl && flags & SCHED_CPUFREQ_PL)
 		return;
 
@@ -854,6 +857,9 @@ sugov_update_shared(struct update_util_data *hook, u64 time, unsigned int flags)
 #ifdef CONFIG_CONTROL_CENTER
 	struct cpufreq_policy *policy = sg_policy->policy;
 #endif
+
+	if (!(flags & SCHED_CPUFREQ_CONTINUE))
+		cb_update(sg_policy->policy, time);
 
 	if (!sg_policy->tunables->pl && flags & SCHED_CPUFREQ_PL)
 		return;

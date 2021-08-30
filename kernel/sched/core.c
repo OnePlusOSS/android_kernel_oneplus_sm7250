@@ -38,7 +38,7 @@
 #ifdef CONFIG_IM
 #include <linux/oem/im.h>
 #endif
-
+#include <linux/oem/cpufreq_bouncing.h>
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 #define TRACE_DEBUG 0
@@ -6988,6 +6988,7 @@ int sched_isolate_cpu(int cpu)
 	update_max_interval();
 	sched_update_group_capacities(cpu);
 
+	cb_reset(cpu, start_time);
 out:
 	cpu_maps_update_done();
 	trace_sched_isolate(cpu, cpumask_bits(cpu_isolated_mask)[0],
@@ -7012,6 +7013,8 @@ int sched_unisolate_cpu_unlocked(int cpu)
 	}
 	if (trace_sched_isolate_enabled())
 		start_time = sched_clock();
+
+	cb_reset(cpu, start_time);
 
 	if (!cpu_isolation_vote[cpu]) {
 		ret_code = -EINVAL;
